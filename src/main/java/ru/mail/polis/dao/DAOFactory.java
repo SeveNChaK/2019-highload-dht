@@ -17,6 +17,7 @@
 package ru.mail.polis.dao;
 
 import org.jetbrains.annotations.NotNull;
+import ru.mail.polis.dao.alex.AlexDAO;
 
 import java.io.File;
 import java.io.IOException;
@@ -53,6 +54,6 @@ public final class DAOFactory {
             throw new IllegalArgumentException("Path is not a directory: " + data);
         }
 
-        throw new IllegalStateException("Not implemented yet");
+        return new AlexDAO(MAX_HEAP/3, data);
     }
 }
