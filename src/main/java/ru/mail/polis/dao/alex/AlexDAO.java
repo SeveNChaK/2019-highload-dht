@@ -14,7 +14,7 @@ import java.nio.file.attribute.BasicFileAttributes;
 import java.util.*;
 
 public class AlexDAO implements DAO {
-    private final SortedMap<ByteBuffer, Row> memTable = new TreeMap<>();
+    private final NavigableMap<ByteBuffer, Row> memTable = new TreeMap<>();
     private final long maxHeap;
     private final File rootDir;
     private int currentFileIndex;
