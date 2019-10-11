@@ -34,6 +34,8 @@ public interface Table {
     long serialNumber();
 
     /**
+     * Combining tables.
+     *
      * @param table - first table to combine;
      * @param otherTables - second table to combine;
      * @param from - start key;
@@ -53,6 +55,8 @@ public interface Table {
     }
 
     /**
+     * Transform rows.
+     *
      * @param iterators - list of iterators rows;
      * @return - iterator.
      */

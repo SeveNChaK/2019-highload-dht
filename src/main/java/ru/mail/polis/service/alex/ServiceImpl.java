@@ -41,6 +41,8 @@ public class ServiceImpl extends HttpServer implements Service {
     }
 
     /**
+     * Received request.
+     *
      * @param request - request that was received (GET, PUT, DELETE)
      * @param id - id element
      * @return - response
