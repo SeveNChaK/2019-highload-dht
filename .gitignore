@@ -11,6 +11,8 @@
 !build.gradle.kts
 !.travis.yml
 !settings.gradle
+!checkstyle.xml
+!.codeclimate.yml
 !wrk/output/*
 !*.lua
 !gradle/wrapper/*
