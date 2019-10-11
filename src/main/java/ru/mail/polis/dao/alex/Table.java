@@ -33,6 +33,13 @@ public interface Table {
 
     long serialNumber();
 
+    /**
+     * @param table - first table to combine;
+     * @param otherTables - second table to combine;
+     * @param from - start key;
+     * @return - list of iterators;
+     * @throws IOException - exception
+     */
     static List<Iterator<Row>> combineTables(@NotNull final Table table,
                                              @NotNull final NavigableMap<Long, Table> otherTables,
                                              @NotNull final ByteBuffer from) throws IOException {
@@ -45,6 +52,10 @@ public interface Table {
         return iterators;
     }
 
+    /**
+     * @param iterators - list of iterators rows;
+     * @return - iterator.
+     */
     static Iterator<Row> transformRows(@NotNull final List<Iterator<Row>> iterators) {
         final var merged = Iterators.mergeSorted(iterators, Row::compareTo);
         final var collapsed = Iters.collapseEquals(merged, Row::getKey);

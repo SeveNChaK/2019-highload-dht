@@ -40,6 +40,11 @@ public class ServiceImpl extends HttpServer implements Service {
         return config;
     }
 
+    /**
+     * @param request - request that was received (GET, PUT, DELETE)
+     * @param id - id element
+     * @return - response
+     */
     @Path("/v0/entity")
     public Response entity(@NotNull final Request request,
                            @Param("id") final String id) {
