@@ -13,9 +13,6 @@
 !settings.gradle
 !checkstyle.xml
 !.codeclimate.yml
-!wrk/output/*
-!*.lua
-!gradle/wrapper/*
 
 # ...even if they are in subdirectories
 !*/
