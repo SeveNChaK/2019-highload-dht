@@ -7,6 +7,7 @@ final class Constants {
     static final String PREFIX = "FT_";
     static final String SUFFIX = ".storage";
     static final String REGEX = PREFIX + "\\d+" + SUFFIX;
+    static final ByteBuffer LOWEST_KEY = ByteBuffer.allocate(0);
 
     private Constants() {
     }

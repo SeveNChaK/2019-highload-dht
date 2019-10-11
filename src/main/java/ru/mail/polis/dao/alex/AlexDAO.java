@@ -18,7 +18,9 @@ import java.util.NavigableMap;
 import java.util.concurrent.ConcurrentSkipListMap;
 import java.util.concurrent.atomic.AtomicLong;
 
-import static ru.mail.polis.dao.alex.Constants.*;
+import static ru.mail.polis.dao.alex.Constants.REGEX;
+import static ru.mail.polis.dao.alex.Constants.PREFIX;
+import static ru.mail.polis.dao.alex.Constants.SUFFIX;
 
 public class AlexDAO implements DAO {
 

@@ -19,7 +19,6 @@ import java.util.NavigableMap;
  * </p>
  */
 public interface Table {
-    ByteBuffer LOWEST_KEY = ByteBuffer.allocate(0);
 
     @NotNull
     Iterator<Row> iterator(@NotNull ByteBuffer from) throws IOException;

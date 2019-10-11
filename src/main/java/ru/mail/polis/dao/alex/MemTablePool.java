@@ -9,12 +9,17 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.NavigableMap;
 import java.util.TreeMap;
-import java.util.concurrent.*;
+import java.util.concurrent.ArrayBlockingQueue;
+import java.util.concurrent.BlockingQueue;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.locks.ReadWriteLock;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 
 import static ru.mail.polis.dao.alex.Constants.TOMBSTONE;
+import static ru.mail.polis.dao.alex.Constants.LOWEST_KEY;
 
 public class MemTablePool implements Table, Closeable {
 
@@ -31,6 +36,12 @@ public class MemTablePool implements Table, Closeable {
     private final long flushThresholdInBytes;
     private final AtomicBoolean isClosed;
 
+    /**
+     * Pool of mem table to flush.
+     *
+     * @param flushThresholdInBytes is the limit above which we flushing mem table
+     * @param startIndex is the start of generation
+     **/
     public MemTablePool(final long flushThresholdInBytes,
                         final long startIndex,
                         final int nThreadsToFlush,
@@ -133,6 +144,11 @@ public class MemTablePool implements Table, Closeable {
         return flushQueue.take();
     }
 
+    /**
+     * Mark mem table as flushed and remove her from map storage of tables.
+     * @param serialNumber is key by which we remove table from storage.
+     *
+     * */
     public void flushed(final long serialNumber) {
         lock.writeLock().lock();
         try {
@@ -142,6 +158,11 @@ public class MemTablePool implements Table, Closeable {
         }
     }
 
+    /**
+     * Compact values from all tables with current table.
+     * @param ssTables is all tables from disk storage
+     *
+     * */
     public void compact(@NotNull final NavigableMap<Long, Table> ssTables) throws IOException {
         lock.readLock().lock();
         final List<Iterator<Row>> iterators;
@@ -153,6 +174,11 @@ public class MemTablePool implements Table, Closeable {
         setCompactTableToFlush(Table.transformRows(iterators));
     }
 
+    /**
+     * Compacted.
+     * @param serialNumber is key of the table that was compacted.
+     *
+     * */
     public void compacted(final long serialNumber) {
         lock.writeLock().lock();
         try {
