@@ -25,9 +25,9 @@ public class MemTablePool implements Table, Closeable {
 
     private final ReadWriteLock lock = new ReentrantReadWriteLock();
     private volatile MemTable current;
-    private NavigableMap<Long, Table> pendingToFlush;
-    private NavigableMap<Long, Iterator<Row>> pendingToCompact;
-    private BlockingQueue<TableToFlush> flushQueue;
+    private final NavigableMap<Long, Table> pendingToFlush;
+    private final NavigableMap<Long, Iterator<Row>> pendingToCompact;
+    private final BlockingQueue<TableToFlush> flushQueue;
     private long index;
 
     @NotNull private final ExecutorService flusher;

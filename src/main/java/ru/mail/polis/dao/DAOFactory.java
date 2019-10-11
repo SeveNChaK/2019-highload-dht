@@ -29,6 +29,7 @@ import java.io.IOException;
  */
 public final class DAOFactory {
     static final long MAX_HEAP = 256 * 1024 * 1024;
+    static final long FLUSH_THRESHOLD = 4 * 1024 * 1024;
 
     private DAOFactory() {
         // Not instantiatable
@@ -54,7 +55,6 @@ public final class DAOFactory {
             throw new IllegalArgumentException("Path is not a directory: " + data);
         }
 
-        final long FLUSH_THRESHOLD = 4 * 1024 * 1024;
         return new AlexDAO(FLUSH_THRESHOLD, data);
     }
 }

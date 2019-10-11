@@ -15,9 +15,9 @@ public class TableToFlush {
         private final long index;
 
         private boolean poisonPill;
-        private boolean isCompactTable = false;
+        private boolean isCompactTable;
 
-        public Builder(@NotNull Iterator<Row> rows,
+        public Builder(@NotNull final Iterator<Row> rows,
                        final long index) {
             this.rows = rows;
             this.index = index;

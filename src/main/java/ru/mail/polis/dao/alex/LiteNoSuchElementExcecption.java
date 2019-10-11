@@ -4,7 +4,7 @@ import java.util.NoSuchElementException;
 
 public class LiteNoSuchElementExcecption extends NoSuchElementException {
 
-    public LiteNoSuchElementExcecption(String s) {
+    public LiteNoSuchElementExcecption(final String s) {
         super(s);
     }
 
