@@ -33,9 +33,9 @@ public class ServiceImpl extends HttpServer implements Service {
         if (port <= MIN_PORT || port >= MAX_PORT) {
             throw new IllegalArgumentException();
         }
-        AcceptorConfig acceptor = new AcceptorConfig();
+        final AcceptorConfig acceptor = new AcceptorConfig();
         acceptor.port = port;
-        HttpServerConfig config = new HttpServerConfig();
+        final HttpServerConfig config = new HttpServerConfig();
         config.acceptors = new AcceptorConfig[]{acceptor};
         return config;
     }
@@ -46,13 +46,13 @@ public class ServiceImpl extends HttpServer implements Service {
         if (id == null || id.isEmpty()) {
             return new Response(Response.BAD_REQUEST, Response.EMPTY);
         }
-        ByteBuffer key = ByteBuffer.wrap(id.getBytes(Charsets.UTF_8));
+        final ByteBuffer key = ByteBuffer.wrap(id.getBytes(Charsets.UTF_8));
         try {
             switch (request.getMethod()) {
                 case Request.METHOD_GET:
-                    ByteBuffer value = dao.get(key);
-                    ByteBuffer duplicate = value.duplicate();
-                    byte[] body = new byte[duplicate.remaining()];
+                    final ByteBuffer value = dao.get(key);
+                    final ByteBuffer duplicate = value.duplicate();
+                    final byte[] body = new byte[duplicate.remaining()];
                     duplicate.get(body);
                     return new Response(Response.OK, body);
                 case Request.METHOD_PUT:
@@ -72,12 +72,12 @@ public class ServiceImpl extends HttpServer implements Service {
     }
 
     @Path("/v0/status")
-    public Response entity(Request request){
+    public Response entity(final Request request){
         return new Response(Response.OK, Response.EMPTY);
     }
 
     @Override
-    public void handleDefault(Request request, HttpSession session) throws IOException {
+    public void handleDefault(final Request request, HttpSession session) throws IOException {
         Response response = new Response(Response.BAD_REQUEST, Response.EMPTY);
         session.sendResponse(response);
     }
