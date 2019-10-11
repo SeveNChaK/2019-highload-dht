@@ -4,22 +4,63 @@ import com.google.common.collect.Iterators;
 import org.jetbrains.annotations.NotNull;
 import ru.mail.polis.Record;
 import ru.mail.polis.dao.DAO;
-import ru.mail.polis.dao.Iters;
 
 import java.io.File;
 import java.io.IOException;
 import java.nio.ByteBuffer;
-import java.nio.file.*;
+import java.nio.file.FileVisitResult;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.SimpleFileVisitor;
 import java.nio.file.attribute.BasicFileAttributes;
-import java.util.*;
+import java.util.Iterator;
+import java.util.NavigableMap;
+import java.util.concurrent.ConcurrentSkipListMap;
+import java.util.concurrent.atomic.AtomicLong;
+
+import static ru.mail.polis.dao.alex.Constants.*;
 
 public class AlexDAO implements DAO {
-    private final NavigableMap<ByteBuffer, Row> memTable = new TreeMap<>();
-    private final long maxHeap;
+
+    @NotNull private MemTablePool memTablePool;
+    @NotNull private NavigableMap<Long, Table> ssTables = new ConcurrentSkipListMap<>();
     private final File rootDir;
-    private int currentFileIndex;
-    private long currentHeap;
-    private final List<FileTable> tables;
+
+    class FlushingTask implements Runnable {
+
+        @Override
+        public void run() {
+            TableToFlush tableToFlush;
+            try {
+                tableToFlush = memTablePool.takeToFlush();
+                final long serialNumber = tableToFlush.getIndex();
+                final boolean poisonReceived = tableToFlush.isPoisonPill();
+                final boolean isCompactTable = tableToFlush.isCompactTable();
+                final var table = tableToFlush.getTable();
+                if (poisonReceived || isCompactTable) {
+                    flush(serialNumber, table);
+                } else {
+                    flushAndLoad(serialNumber, table);
+                }
+                if (isCompactTable) {
+                    completeCompaction(serialNumber);
+                    memTablePool.compacted(serialNumber);
+                } else {
+                    memTablePool.flushed(serialNumber);
+                }
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            } catch (IOException e) {
+                e.printStackTrace();
+            }
+        }
+    }
+
+    public AlexDAO(
+            final long maxHeap,
+            @NotNull final File rootDir) throws IOException {
+        this(maxHeap, rootDir, Runtime.getRuntime().availableProcessors() + 1);
+    }
 
     /**
      * Creates LSM storage.
@@ -28,107 +69,107 @@ public class AlexDAO implements DAO {
      * @param rootDir the folder in which files will be written and read
      * @throws IOException if an I/O error is thrown by a File walker
      */
-    public AlexDAO(final long maxHeap, @NotNull final File rootDir) throws IOException {
-        this.maxHeap = maxHeap;
+    public AlexDAO(final long maxHeap, @NotNull final File rootDir, final int threadsToFlush) throws IOException {
         this.rootDir = rootDir;
-        this.currentHeap = 0;
-        this.tables = new ArrayList<>();
-        this.currentFileIndex = 0;
-        final EnumSet<FileVisitOption> options = EnumSet.of(FileVisitOption.FOLLOW_LINKS);
-        final int maxDeep = 1;
-        Files.walkFileTree(rootDir.toPath(), options, maxDeep, new SimpleFileVisitor<>() {
+
+        final var indexSStable = new AtomicLong();
+        Files.walkFileTree(rootDir.toPath(), new SimpleFileVisitor<>() {
             @Override
-            public FileVisitResult visitFile(final Path file, final BasicFileAttributes attrs) throws IOException {
-                if (file.getFileName().toString().startsWith(Constants.PREFIX)
-                        && file.getFileName().toString().endsWith(Constants.SUFFIX)) {
-                    final FileTable fileTable = new FileTable(new File(rootDir, file.getFileName().toString()));
-                    tables.add(fileTable);
-                    currentFileIndex++;
+            public FileVisitResult visitFile(
+                    final Path path,
+                    final BasicFileAttributes attrs) throws IOException {
+                final File file = path.toFile();
+                if (file.getName().matches(REGEX)) {
+                    final String fileName = file.getName().split("\\.")[0];
+                    final long currentIndexFile = Long.parseLong(fileName.split("_")[1]);
+                    indexSStable.set(
+                            Math.max(indexSStable.get(), currentIndexFile + 1L));
+                    ssTables.put(currentIndexFile, new SSTable(file.toPath(), currentIndexFile));
                 }
                 return FileVisitResult.CONTINUE;
             }
         });
+        this.memTablePool = new MemTablePool(
+                maxHeap,
+                indexSStable.get(),
+                threadsToFlush,
+                new FlushingTask());
     }
 
     @NotNull
     @Override
     public Iterator<Record> iterator(@NotNull final ByteBuffer from) throws IOException {
-        final List<Iterator<Row>> tableIterators = new LinkedList<>();
-        for (final FileTable fileT : tables) {
-            tableIterators.add(fileT.iterator(from));
-        }
+        final var alive = rowsIterator(from);
+        return Iterators.transform(alive,
+                r -> Record.of(r.getKey(), r.getValue().getData()));
+    }
 
-        final Iterator<Row> memTableIterator = memTable.tailMap(from).values().iterator();
-        tableIterators.add(memTableIterator);
-
-        final Iterator<Row> result = getActualRowIterator(tableIterators);
-        return Iterators.transform(result, row -> row.getRecord());
+    @NotNull
+    private Iterator<Row> rowsIterator(@NotNull final ByteBuffer from) throws IOException {
+        final var iterators = Table.combineTables(memTablePool, ssTables, from);
+        return Table.transformRows(iterators);
     }
 
     @Override
     public void upsert(@NotNull final ByteBuffer key, @NotNull final ByteBuffer value) throws IOException {
-        memTable.put(key, Row.of(currentFileIndex, key, value, Constants.ALIVE));
-        currentHeap += Integer.BYTES
-                + (long) (key.remaining() + Constants.LINK_SIZE + Integer.BYTES * Constants.NUMBER_FIELDS_BYTE_BUF)
-                + (long) (value.remaining() + Constants.LINK_SIZE + Integer.BYTES * Constants.NUMBER_FIELDS_BYTE_BUF)
-                + Integer.BYTES;
-        checkHeap();
-    }
-
-    private void dump() throws IOException {
-        final String fileTableName = Constants.PREFIX + currentFileIndex + Constants.SUFFIX;
-        currentFileIndex++;
-        final File table = new File(rootDir, fileTableName);
-        FileTable.write(table, memTable.values().iterator());
-        tables.add(new FileTable(table));
+        memTablePool.upsert(key, value);
     }
 
     @Override
     public void remove(@NotNull final ByteBuffer key) throws IOException {
-        final Row removedRow = memTable.put(key, Row.of(currentFileIndex, key, Constants.TOMBSTONE, Constants.DEAD));
-        if (removedRow == null) {
-            currentHeap += Integer.BYTES
-                    + (long) (key.remaining() + Constants.LINK_SIZE + Integer.BYTES * Constants.NUMBER_FIELDS_BYTE_BUF)
-                    + (long) (Constants.LINK_SIZE + Integer.BYTES * Constants.NUMBER_FIELDS_BYTE_BUF)
-                    + Integer.BYTES;
-        } else if (!removedRow.isDead()) {
-            currentHeap -= removedRow.getValue().remaining();
-        }
-        checkHeap();
-    }
-
-    private void checkHeap() throws IOException {
-        if (currentHeap >= maxHeap) {
-            dump();
-            currentHeap = 0;
-            memTable.clear();
-        }
+        memTablePool.remove(key);
     }
 
     @Override
     public void close() throws IOException {
-        if (currentHeap != 0) {
-            dump();
-        }
-        for (final FileTable table : tables) {
-            table.close();
-        }
+        memTablePool.close();
     }
 
     @Override
     public void compact() throws IOException {
-        Compaction.compactFile(rootDir, tables);
+        memTablePool.compact(ssTables);
     }
 
-    /**
-     * Get merge sorted, collapse equals, without dead row iterator.
-     *
-     * @param tableIterators collection MyTableIterator
-     * @return Row iterator
-     */
-    static Iterator<Row> getActualRowIterator(@NotNull final Collection<Iterator<Row>> tableIterators) {
-        final Iterator<Row> mergingTableIterator = Iterators.mergeSorted(tableIterators, Row::compareTo);
-        final Iterator<Row> collapsedIterator = Iters.collapseEquals(mergingTableIterator, Row::getKey);
-        return Iterators.filter(collapsedIterator, row -> !row.isDead());
+    private void flush(final long serialNumber,
+                       @NotNull final Iterator<Row> rowsIterator) throws IOException {
+        SSTable.flush(
+                Path.of(rootDir.getAbsolutePath(), PREFIX + serialNumber + SUFFIX),
+                rowsIterator);
+    }
+
+    private void flushAndLoad(final long serialNumber,
+                              @NotNull final Iterator<Row> rowsIterator) throws IOException {
+        final var path = Path.of(rootDir.getAbsolutePath(), PREFIX + serialNumber + SUFFIX);
+        SSTable.flush(path, rowsIterator);
+        ssTables.put(serialNumber,
+                new SSTable(
+                        path.toAbsolutePath(),
+                        serialNumber));
+    }
+
+    private void completeCompaction(final long serialNumber) throws IOException {
+        ssTables = new ConcurrentSkipListMap<>();
+        cleanDirectory(serialNumber);
+    }
+
+    private void cleanDirectory(final long serialNumber) throws IOException {
+        Files.walkFileTree(rootDir.toPath(), new SimpleFileVisitor<>() {
+            @Override
+            public FileVisitResult visitFile(
+                    final Path path,
+                    final BasicFileAttributes attrs) throws IOException {
+                final File file = path.toFile();
+                if (file.getName().matches(REGEX)) {
+                    final String fileName = file.getName().split("\\.")[0];
+                    final long sn = Long.parseLong(fileName.split("_")[1]);
+                    if (sn >= serialNumber) {
+                        ssTables.put(sn, new SSTable(file.toPath(), sn));
+                        return FileVisitResult.CONTINUE;
+                    }
+                }
+                Files.delete(path);
+                return FileVisitResult.CONTINUE;
+            }
+        });
     }
 }
