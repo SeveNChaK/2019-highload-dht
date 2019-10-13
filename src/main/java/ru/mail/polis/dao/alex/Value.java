@@ -50,4 +50,3 @@ public final class Value implements Comparable<Value> {
         return Long.compare(Math.abs(value.timestamp), Math.abs(timestamp));
     }
 }
-

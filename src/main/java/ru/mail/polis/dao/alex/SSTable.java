@@ -13,7 +13,6 @@ import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.NoSuchElementException;
 
-
 public final class SSTable implements Table {
 
     @NotNull private final LongBuffer offsets;

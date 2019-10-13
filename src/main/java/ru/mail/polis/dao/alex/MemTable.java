@@ -13,7 +13,7 @@ import java.util.concurrent.atomic.AtomicLong;
 @ThreadSafe
 public final class MemTable implements Table {
 
-    @NotNull private NavigableMap<ByteBuffer, Row> storage = new ConcurrentSkipListMap<>();
+    @NotNull private final NavigableMap<ByteBuffer, Row> storage = new ConcurrentSkipListMap<>();
     @NotNull private final AtomicLong sizeInBytes = new AtomicLong();
     private static final long SERIAL_NUMBER = Long.MAX_VALUE;
 
@@ -47,11 +47,6 @@ public final class MemTable implements Table {
         } else if (!prev.getValue().isDead()){
             sizeInBytes.addAndGet(-prev.getValue().getData().remaining());
         }
-    }
-
-    public void clear() {
-        storage = new ConcurrentSkipListMap<>();
-        sizeInBytes.set(0L);
     }
 
     @Override
