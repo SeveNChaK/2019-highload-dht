@@ -16,16 +16,11 @@
 
 package ru.mail.polis.dao;
 
-<<<<<<< HEAD
 import org.jetbrains.annotations.NotNull;
 import ru.mail.polis.dao.alex.AlexDAO;
 
-=======
->>>>>>> 9a9c65c455b3537019ec5e67c8b66b1cdaa65730
 import java.io.File;
 import java.io.IOException;
-
-import org.jetbrains.annotations.NotNull;
 
 /**
  * Custom {@link DAO} factory.
@@ -34,10 +29,7 @@ import org.jetbrains.annotations.NotNull;
  */
 public final class DAOFactory {
     static final long MAX_HEAP = 256 * 1024 * 1024;
-<<<<<<< HEAD
     static final long FLUSH_THRESHOLD = 4 * 1024 * 1024;
-=======
->>>>>>> 9a9c65c455b3537019ec5e67c8b66b1cdaa65730
 
     private DAOFactory() {
         // Not instantiatable
