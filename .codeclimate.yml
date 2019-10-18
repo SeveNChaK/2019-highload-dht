@@ -23,6 +23,8 @@ plugins:
         - "java-unnecessary"
         - "java-unusedcode"
     checks:
+      AvoidSynchronizedAtMethodLevel:
+        enabled: false
       AvoidThrowingRawExceptionTypes:
         enabled: false 
       DataClass:
@@ -50,3 +52,8 @@ checks:
   return-statements:
     config:
       threshold: 10 # Have pattern-matching-like code
+<<<<<<< HEAD
+=======
+exclude_patterns:
+- "**/*.svg"
+>>>>>>> 9a9c65c455b3537019ec5e67c8b66b1cdaa65730
