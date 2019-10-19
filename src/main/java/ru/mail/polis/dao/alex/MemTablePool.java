@@ -61,8 +61,8 @@ public class MemTablePool implements Table, Closeable {
     @NotNull
     @Override
     public Iterator<Row> iterator(@NotNull final ByteBuffer from) throws IOException {
-        lock.readLock().lock();
         final List<Iterator<Row>> iterators;
+        lock.readLock().lock();
         try {
             iterators = Table.combineTables(current, pendingToFlush, from);
         } finally {
@@ -78,6 +78,7 @@ public class MemTablePool implements Table, Closeable {
             throw new IllegalStateException("MemTablePool is already closed!");
         }
         setToFlush(key);
+        lock.readLock().lock();
         try {
             current.upsert(key, value);
         } finally {
@@ -91,6 +92,7 @@ public class MemTablePool implements Table, Closeable {
             throw new IllegalStateException("MemTablePool is already closed!");
         }
         setToFlush(key);
+        lock.readLock().lock();
         try {
             current.remove(key);
         } finally {
@@ -101,8 +103,8 @@ public class MemTablePool implements Table, Closeable {
     private void setToFlush(@NotNull final ByteBuffer key) throws IOException {
         if (current.sizeInBytes()
                 + Row.getSizeOfFlushedRow(key, TOMBSTONE) >= flushThresholdInBytes) {
-            lock.writeLock().lock();
             TableToFlush tableToFlush = null;
+            lock.writeLock().lock();
             try {
                 if (current.sizeInBytes()
                         + Row.getSizeOfFlushedRow(key, TOMBSTONE) >= flushThresholdInBytes) {
@@ -126,8 +128,8 @@ public class MemTablePool implements Table, Closeable {
     }
 
     private void setCompactTableToFlush(@NotNull final Iterator<Row> rows) throws IOException {
-        lock.writeLock().lock();
         TableToFlush tableToFlush;
+        lock.writeLock().lock();
         try {
             tableToFlush = new TableToFlush
                     .Builder(rows, index)
@@ -172,8 +174,8 @@ public class MemTablePool implements Table, Closeable {
      *
      * */
     public void compact(@NotNull final NavigableMap<Long, Table> ssTables) throws IOException {
-        lock.readLock().lock();
         final List<Iterator<Row>> iterators;
+        lock.readLock().lock();
         try {
             iterators = Table.combineTables(current, ssTables, LOWEST_KEY);
         } finally {
@@ -225,8 +227,8 @@ public class MemTablePool implements Table, Closeable {
         if (!isClosed.compareAndSet(false, true)) {
             return;
         }
-        lock.writeLock().lock();
         TableToFlush tableToFlush;
+        lock.writeLock().lock();
         try {
             tableToFlush = new TableToFlush
                     .Builder(current.iterator(LOWEST_KEY), index)

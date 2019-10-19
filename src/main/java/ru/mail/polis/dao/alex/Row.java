@@ -44,7 +44,7 @@ final class Row implements Comparable<Row> {
             @NotNull final ByteBuffer key,
             @NotNull final ByteBuffer value) {
         return Integer.BYTES + key.remaining() + Long.BYTES
-                + (value.remaining() == 0 ? 0 : Long.BYTES + value.remaining());
+                + (value.remaining() == 0 ? 0L : Long.BYTES + value.remaining());
     }
 
     private long getIndex() {
