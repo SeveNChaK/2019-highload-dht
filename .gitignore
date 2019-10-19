@@ -13,6 +13,8 @@
 !settings.gradle
 !checkstyle.xml
 !.codeclimate.yml
+!wrk/output/stage_2/*
+!wrk/output/stage_3/*
 
 # ...even if they are in subdirectories
 !*/
