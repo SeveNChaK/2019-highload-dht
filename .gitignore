@@ -15,6 +15,7 @@
 !.codeclimate.yml
 !wrk/output/stage_2/*
 !wrk/output/stage_3/*
+!profiler/*
 
 # ...even if they are in subdirectories
 !*/
