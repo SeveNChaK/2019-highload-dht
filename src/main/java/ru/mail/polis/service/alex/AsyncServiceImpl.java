@@ -34,6 +34,14 @@ public class AsyncServiceImpl extends HttpServer implements Service {
     private final DAO dao;
     private final Executor executor;
 
+    /**
+     * The constructor of asynchronous server.
+     *
+     * @param port - server port
+     * @param dao - is dao
+     * @param executor - is executor
+     * @throws IOException - input/output exception
+     */
     public AsyncServiceImpl(final int port,
                             @NotNull final DAO dao,
                             @NotNull final Executor executor) throws IOException {
@@ -83,6 +91,13 @@ public class AsyncServiceImpl extends HttpServer implements Service {
         }
     }
 
+    /**
+     * Send response 'OK'.
+     *
+     * @param request - request by client
+     * @param session - is session
+     * @throws IOException - input/output exception
+     */
     @Path("/v0/status")
     public void entity(@NotNull final Request request, @NotNull final HttpSession session) throws IOException {
         session.sendResponse(new Response(Response.OK, Response.EMPTY));

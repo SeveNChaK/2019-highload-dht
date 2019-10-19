@@ -17,6 +17,11 @@ public class TransferChunks {
         this.iterator = iterator;
     }
 
+    /**
+     * Get next chunk.
+     *
+     * @return array of bytes
+     */
     public byte[] next() {
         assert hasNext();
         final Record record = iterator.next();
