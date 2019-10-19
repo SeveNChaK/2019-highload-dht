@@ -48,7 +48,7 @@ public class TransferChunks {
     }
 
     byte[] end() {
-        return END;
+        return END.clone();
     }
 
     private static byte[] toArray(@NotNull final ByteBuffer byteBuffer) {

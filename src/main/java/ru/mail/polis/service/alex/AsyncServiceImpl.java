@@ -1,7 +1,13 @@
 package ru.mail.polis.service.alex;
 
 import com.google.common.base.Charsets;
-import one.nio.http.*;
+import one.nio.http.HttpServer;
+import one.nio.http.HttpServerConfig;
+import one.nio.http.Path;
+import one.nio.http.Param;
+import one.nio.http.Request;
+import one.nio.http.Response;
+import one.nio.http.HttpSession;
 import one.nio.net.Socket;
 import one.nio.server.AcceptorConfig;
 import one.nio.server.RejectedSessionException;
@@ -16,6 +22,7 @@ import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.util.Iterator;
 import java.util.NoSuchElementException;
+import java.util.Objects;
 import java.util.concurrent.Executor;
 
 public class AsyncServiceImpl extends HttpServer implements Service {
@@ -27,7 +34,9 @@ public class AsyncServiceImpl extends HttpServer implements Service {
     private final DAO dao;
     private final Executor executor;
 
-    public AsyncServiceImpl(final int port, @NotNull final DAO dao, @NotNull final Executor executor) throws IOException {
+    public AsyncServiceImpl(final int port,
+                            @NotNull final DAO dao,
+                            @NotNull final Executor executor) throws IOException {
         super(getConfig(port));
         this.dao = dao;
         this.executor = executor;
@@ -57,7 +66,7 @@ public class AsyncServiceImpl extends HttpServer implements Service {
         if (id == null || id.isEmpty()) {
             session.sendError(Response.BAD_REQUEST, "No Id!");
         }
-        final ByteBuffer key = ByteBuffer.wrap(id.getBytes(Charsets.UTF_8));
+        final ByteBuffer key = ByteBuffer.wrap(Objects.requireNonNull(id).getBytes(Charsets.UTF_8));
         switch (request.getMethod()) {
             case Request.METHOD_GET:
                 executeAsync(session, () -> get(key));
@@ -80,7 +89,7 @@ public class AsyncServiceImpl extends HttpServer implements Service {
     }
 
     @Override
-    public HttpSession createSession(Socket socket) throws RejectedSessionException {
+    public HttpSession createSession(final Socket socket) throws RejectedSessionException {
         return new StorageSession(socket, this);
     }
 
@@ -95,7 +104,7 @@ public class AsyncServiceImpl extends HttpServer implements Service {
         if (end != null && end.isEmpty()) {
             session.sendError(Response.BAD_REQUEST, "End is empty!");
         }
-        final ByteBuffer from = ByteBuffer.wrap(start.getBytes(Charsets.UTF_8));
+        final ByteBuffer from = ByteBuffer.wrap(Objects.requireNonNull(start).getBytes(Charsets.UTF_8));
         final ByteBuffer to = end == null ? null : ByteBuffer.wrap(end.getBytes(Charsets.UTF_8));
         try {
             final Iterator<Record> records = dao.range(from, to);

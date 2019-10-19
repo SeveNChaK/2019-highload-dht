@@ -19,7 +19,6 @@ import java.util.NoSuchElementException;
 
 public class ServiceImpl extends HttpServer implements Service {
 
-    private static final int MIN_PORT = 1024;
     private static final int MAX_PORT = 65535;
 
     private final DAO dao;
@@ -30,7 +29,7 @@ public class ServiceImpl extends HttpServer implements Service {
     }
 
     private static HttpServerConfig getConfig(final int port) {
-        if (port <= MIN_PORT || port >= MAX_PORT) {
+        if (port <= 1024 || port >= MAX_PORT) {
             throw new IllegalArgumentException();
         }
         final AcceptorConfig acceptor = new AcceptorConfig();

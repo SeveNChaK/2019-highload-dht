@@ -13,7 +13,7 @@ import java.util.Iterator;
 public class StorageSession extends HttpSession {
     private TransferChunks chunks;
 
-    StorageSession(Socket socket, HttpServer server) {
+    StorageSession(final Socket socket, final HttpServer server) {
         super(socket, server);
     }
 
