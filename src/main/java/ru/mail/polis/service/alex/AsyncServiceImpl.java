@@ -92,10 +92,10 @@ public class AsyncServiceImpl extends HttpServer implements Service {
     }
 
     /**
-     * Send response 'OK'.
+     * Send response 'OK' on request 'status'.
      *
-     * @param request - request by client
-     * @param session - is session
+     * @param request - request object.
+     * @param session - HttpSession
      * @throws IOException - input/output exception
      */
     @Path("/v0/status")
@@ -108,6 +108,15 @@ public class AsyncServiceImpl extends HttpServer implements Service {
         return new StorageSession(socket, this);
     }
 
+    /**
+     * Resource for range values.
+     *
+     * @param request - request object
+     * @param session - HttpSession
+     * @param start - start key for range
+     * @param end - end key for range
+     * @throws IOException - input/output exception
+     */
     @Path("/v0/entities")
     public void entities(@NotNull final Request request,
                          @NotNull final HttpSession session,
