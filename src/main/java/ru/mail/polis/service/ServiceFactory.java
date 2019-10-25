@@ -26,7 +26,6 @@ import ru.mail.polis.dao.DAO;
 import ru.mail.polis.service.alex.AsyncServiceImpl;
 import ru.mail.polis.service.alex.HashingTopology;
 
-import java.io.IOException;
 import java.util.concurrent.Executor;
 import java.util.concurrent.Executors;
 

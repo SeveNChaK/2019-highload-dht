@@ -1,7 +1,15 @@
 package ru.mail.polis.service.alex;
 
 import com.google.common.base.Charsets;
-import one.nio.http.*;
+import one.nio.http.HttpServer;
+import one.nio.http.HttpClient;
+import one.nio.http.HttpServerConfig;
+import one.nio.http.Request;
+import one.nio.http.Response;
+import one.nio.http.Param;
+import one.nio.http.Path;
+import one.nio.http.HttpSession;
+import one.nio.http.HttpException;
 import one.nio.net.ConnectionString;
 import one.nio.net.Socket;
 import one.nio.pool.PoolException;
@@ -15,10 +23,7 @@ import ru.mail.polis.service.Service;
 
 import java.io.IOException;
 import java.nio.ByteBuffer;
-import java.util.HashMap;
-import java.util.Iterator;
-import java.util.NoSuchElementException;
-import java.util.Objects;
+import java.util.*;
 import java.util.concurrent.Executor;
 
 public class AsyncServiceImpl extends HttpServer implements Service {
@@ -30,7 +35,7 @@ public class AsyncServiceImpl extends HttpServer implements Service {
     private final DAO dao;
     private final Executor executor;
     private final HashingTopology nodes;
-    private final HashMap<String, HttpClient> pool;
+    private final Map<String, HttpClient> pool;
 
     /**
      * The constructor of asynchronous server.
