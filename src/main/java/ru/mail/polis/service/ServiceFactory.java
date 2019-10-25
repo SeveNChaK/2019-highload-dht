@@ -24,6 +24,7 @@ import org.jetbrains.annotations.NotNull;
 
 import ru.mail.polis.dao.DAO;
 import ru.mail.polis.service.alex.AsyncServiceImpl;
+import ru.mail.polis.service.alex.HashingTopology;
 
 import java.io.IOException;
 import java.util.concurrent.Executor;
@@ -64,6 +65,10 @@ public final class ServiceFactory {
 
         final Executor executor = Executors.newFixedThreadPool(Runtime.getRuntime().availableProcessors(),
                 new ThreadFactoryBuilder().setNameFormat("AsyncWorker").build());
-        return new AsyncServiceImpl(port, dao, executor);
+        final HashingTopology hTopology = new HashingTopology(
+                topology,
+                "http://localhost:" + port,
+                1024);
+        return new AsyncServiceImpl(port, dao, executor, hTopology);
     }
 }
