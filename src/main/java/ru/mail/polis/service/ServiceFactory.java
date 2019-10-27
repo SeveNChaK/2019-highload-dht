@@ -63,7 +63,7 @@ public final class ServiceFactory {
         }
 
         final Executor executor = Executors.newFixedThreadPool(Runtime.getRuntime().availableProcessors(),
-                new ThreadFactoryBuilder().setNameFormat("AsyncWorker").build());
+                new ThreadFactoryBuilder().setNameFormat("AsyncWorker-%d").build());
         final HashingTopology hTopology = new HashingTopology(
                 topology,
                 "http://localhost:" + port,
