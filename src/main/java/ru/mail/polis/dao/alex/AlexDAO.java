@@ -4,6 +4,7 @@ import com.google.common.base.Splitter;
 import com.google.common.collect.Iterables;
 import com.google.common.collect.Iterators;
 import org.jetbrains.annotations.NotNull;
+import org.jetbrains.annotations.Nullable;
 import ru.mail.polis.Record;
 import ru.mail.polis.dao.DAO;
 
@@ -17,14 +18,19 @@ import java.nio.file.SimpleFileVisitor;
 import java.nio.file.attribute.BasicFileAttributes;
 import java.util.Iterator;
 import java.util.NavigableMap;
+import java.util.Objects;
 import java.util.concurrent.ConcurrentSkipListMap;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.concurrent.locks.ReadWriteLock;
+import java.util.concurrent.locks.ReentrantReadWriteLock;
 
 import static ru.mail.polis.dao.alex.Constants.REGEX;
 import static ru.mail.polis.dao.alex.Constants.PREFIX;
 import static ru.mail.polis.dao.alex.Constants.SUFFIX;
 
 public class AlexDAO implements DAO {
+
+    private final ReadWriteLock lock = new ReentrantReadWriteLock();
 
     @NotNull private MemTablePool memTablePool;
     @NotNull private NavigableMap<Long, Table> ssTables = new ConcurrentSkipListMap<>();
@@ -104,15 +110,36 @@ public class AlexDAO implements DAO {
     @NotNull
     @Override
     public Iterator<Record> iterator(@NotNull final ByteBuffer from) throws IOException {
-        final var alive = rowsIterator(from);
+        final var collapsed = rowsIterator(from);
+        final var alive = Iterators.filter(collapsed, r -> !Objects.requireNonNull(r).getValue().isDead());
         return Iterators.transform(alive,
-                r -> Record.of(r.getKey(), r.getValue().getData()));
+                r -> Record.of(Objects.requireNonNull(r).getKey(), r.getValue().getData()));
     }
 
     @NotNull
     private Iterator<Row> rowsIterator(@NotNull final ByteBuffer from) throws IOException {
         final var iterators = Table.combineTables(memTablePool, ssTables, from);
         return Table.transformRows(iterators);
+    }
+
+    /**
+     *  Get cell by key.
+     *
+     * @param key key
+     * @return null if cell is not found and cell otherwise
+     * @throws IOException if an I/O error occurs
+     */
+    @Nullable
+    public Value getValue(@NotNull final ByteBuffer key) throws IOException {
+        final var iter = rowsIterator(key);
+        if (!iter.hasNext()) {
+            return null;
+        }
+        final var row = iter.next();
+        if (!row.getKey().equals(key)) {
+            return null;
+        }
+        return row.getValue();
     }
 
     @Override
@@ -158,23 +185,28 @@ public class AlexDAO implements DAO {
     }
 
     private void cleanDirectory(final long serialNumber) throws IOException {
-        Files.walkFileTree(rootDir.toPath(), new SimpleFileVisitor<>() {
-            @Override
-            public FileVisitResult visitFile(
-                    final Path path,
-                    final BasicFileAttributes attrs) throws IOException {
-                final File file = path.toFile();
-                if (file.getName().matches(REGEX)) {
-                    final String fileName = Iterables.get(Splitter.on('.').split(file.getName()), 0);
-                    final long sn = Long.parseLong(Iterables.get(Splitter.on('_').split(fileName), 1));
-                    if (sn >= serialNumber) {
-                        ssTables.put(sn, new SSTable(file.toPath(), sn));
-                        return FileVisitResult.CONTINUE;
+        lock.writeLock().lock();
+        try {
+            Files.walkFileTree(rootDir.toPath(), new SimpleFileVisitor<>() {
+                @Override
+                public FileVisitResult visitFile(
+                        final Path path,
+                        final BasicFileAttributes attrs) throws IOException {
+                    final File file = path.toFile();
+                    if (file.getName().matches(REGEX)) {
+                        final String fileName = Iterables.get(Splitter.on('.').split(file.getName()), 0);
+                        final long sn = Long.parseLong(Iterables.get(Splitter.on('_').split(fileName), 1));
+                        if (sn >= serialNumber) {
+                            ssTables.put(sn, new SSTable(file.toPath(), sn));
+                            return FileVisitResult.CONTINUE;
+                        }
                     }
+                    Files.delete(path);
+                    return FileVisitResult.CONTINUE;
                 }
-                Files.delete(path);
-                return FileVisitResult.CONTINUE;
-            }
-        });
+            });
+        } finally {
+            lock.writeLock().unlock();
+        }
     }
 }

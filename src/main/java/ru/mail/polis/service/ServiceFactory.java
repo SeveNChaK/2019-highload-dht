@@ -23,8 +23,8 @@ import java.util.Set;
 import org.jetbrains.annotations.NotNull;
 
 import ru.mail.polis.dao.DAO;
-import ru.mail.polis.service.alex.AsyncServiceImpl;
-import ru.mail.polis.service.alex.HashingTopology;
+import ru.mail.polis.service.alex.ConsistentHashImpl;
+import ru.mail.polis.service.alex.ReplicatedHttpServer;
 
 import java.util.concurrent.Executor;
 import java.util.concurrent.Executors;
@@ -62,12 +62,17 @@ public final class ServiceFactory {
             throw new IllegalArgumentException("Port out of range");
         }
 
+        final var nodes =
+                new ConsistentHashImpl(
+                        topology,
+                        "http://localhost:" + port);
+
         final Executor executor = Executors.newFixedThreadPool(Runtime.getRuntime().availableProcessors(),
                 new ThreadFactoryBuilder().setNameFormat("AsyncWorker-%d").build());
-        final HashingTopology hTopology = new HashingTopology(
-                topology,
-                "http://localhost:" + port,
-                1024);
-        return new AsyncServiceImpl(port, dao, executor, hTopology);
+        final var proxyWorkers =
+                Executors.newFixedThreadPool(Runtime.getRuntime().availableProcessors() + 1,
+                        new ThreadFactoryBuilder().setNameFormat("ProxyWorker-%d").build());
+        return new ReplicatedHttpServer(port, nodes, dao, executor, proxyWorkers);
+//        return new AsyncServiceImpl(port, dao, executor, hTopology);
     }
 }

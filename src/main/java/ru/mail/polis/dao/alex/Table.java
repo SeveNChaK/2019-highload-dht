@@ -62,7 +62,6 @@ public interface Table {
      */
     static Iterator<Row> transformRows(@NotNull final List<Iterator<Row>> iterators) {
         final var merged = Iterators.mergeSorted(iterators, Row::compareTo);
-        final var collapsed = Iters.collapseEquals(merged, Row::getKey);
-        return Iterators.filter(collapsed, r -> !r.getValue().isDead());
+        return Iters.collapseEquals(merged, Row::getKey);
     }
 }

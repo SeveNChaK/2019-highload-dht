@@ -28,7 +28,7 @@ public final class Value implements Comparable<Value> {
     }
 
     @NotNull
-    public static Value tombstone(final long timestamp) {
+    static Value tombstone(final long timestamp) {
         return new Value(-timestamp, TOMBSTONE);
     }
 
