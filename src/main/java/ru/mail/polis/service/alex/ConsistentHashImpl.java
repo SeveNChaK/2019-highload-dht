@@ -5,7 +5,15 @@ import com.google.common.hash.Hashing;
 import org.jetbrains.annotations.NotNull;
 
 import java.nio.ByteBuffer;
-import java.util.*;
+import java.util.NavigableMap;
+import java.util.NavigableSet;
+import java.util.TreeSet;
+import java.util.Set;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.TreeMap;import java.util.Map;
+import java.util.Collection;
+import java.util.Collections;
 
 public final class ConsistentHashImpl implements ConsistentHash {
 

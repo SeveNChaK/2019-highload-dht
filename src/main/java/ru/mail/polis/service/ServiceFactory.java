@@ -73,6 +73,5 @@ public final class ServiceFactory {
                 Executors.newFixedThreadPool(Runtime.getRuntime().availableProcessors() + 1,
                         new ThreadFactoryBuilder().setNameFormat("ProxyWorker-%d").build());
         return new ReplicatedHttpServer(port, nodes, dao, executor, proxyWorkers);
-//        return new AsyncServiceImpl(port, dao, executor, hTopology);
     }
 }
