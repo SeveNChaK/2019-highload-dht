@@ -2,7 +2,6 @@ package ru.mail.polis.service.alex;
 
 import com.google.common.base.Charsets;
 import one.nio.http.HttpServer;
-import one.nio.http.HttpException;
 import one.nio.http.HttpSession;
 import one.nio.http.HttpServerConfig;
 import one.nio.http.Param;
