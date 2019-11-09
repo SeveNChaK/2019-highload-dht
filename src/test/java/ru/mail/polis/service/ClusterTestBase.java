@@ -18,14 +18,12 @@ package ru.mail.polis.service;
 
 import com.google.common.collect.Iterators;
 import one.nio.http.HttpClient;
-import one.nio.http.HttpException;
 import one.nio.http.Response;
 import one.nio.net.ConnectionString;
-import one.nio.pool.PoolException;
 import org.jetbrains.annotations.NotNull;
 import ru.mail.polis.TestBase;
 
-import java.io.IOException;
+import java.time.Duration;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Set;
@@ -37,7 +35,7 @@ import java.util.concurrent.TimeUnit;
  * @author Vadim Tsesko
  */
 abstract class ClusterTestBase extends TestBase {
-    private static final long TIMEOUT = TimeUnit.SECONDS.toMillis(1);
+    private static final Duration TIMEOUT = Duration.ofSeconds(10);
     private final Map<String, HttpClient> hostToClient = new HashMap<>();
     Set<String> endpoints;
 
@@ -46,7 +44,7 @@ abstract class ClusterTestBase extends TestBase {
         final String endpoint = Iterators.get(endpoints.iterator(), node);
         return hostToClient.computeIfAbsent(
                 endpoint,
-                key -> new HttpClient(new ConnectionString(key + "?timeout=" + TIMEOUT)));
+                key -> new HttpClient(new ConnectionString(key + "?timeout=" + TIMEOUT.dividedBy(2).toMillis())));
     }
 
     private void resetClient(final int node) {
@@ -84,11 +82,6 @@ abstract class ClusterTestBase extends TestBase {
     }
 
     @NotNull
-    private String path(@NotNull final String id) {
-        return "/v0/entity?id=" + id;
-    }
-
-    @NotNull
     private String path(
             @NotNull final String id,
             final int ack,
@@ -98,37 +91,37 @@ abstract class ClusterTestBase extends TestBase {
 
     Response get(
             final int node,
-            @NotNull final String key) throws InterruptedException, IOException, HttpException, PoolException {
-        return client(node).get(path(key));
+            @NotNull final String key) throws Exception {
+        return get(node, key, 1, 1);
     }
 
     Response get(
             final int node,
             @NotNull final String key,
             final int ack,
-            final int from) throws InterruptedException, IOException, HttpException, PoolException {
+            final int from) throws Exception {
         return client(node).get(path(key, ack, from));
     }
 
     Response delete(
             final int node,
-            @NotNull final String key) throws InterruptedException, IOException, HttpException, PoolException {
-        return client(node).delete(path(key));
+            @NotNull final String key) throws Exception {
+        return delete(node, key, 1, 1);
     }
 
     Response delete(
             final int node,
             @NotNull final String key,
             final int ack,
-            final int from) throws InterruptedException, IOException, HttpException, PoolException {
+            final int from) throws Exception {
         return client(node).delete(path(key, ack, from));
     }
 
     Response upsert(
             final int node,
             @NotNull final String key,
-            @NotNull final byte[] data) throws InterruptedException, IOException, HttpException, PoolException {
-        return client(node).put(path(key), data);
+            @NotNull final byte[] data) throws Exception {
+        return upsert(node, key, data, 1, 1);
     }
 
     Response upsert(
@@ -136,7 +129,7 @@ abstract class ClusterTestBase extends TestBase {
             @NotNull final String key,
             @NotNull final byte[] data,
             final int ack,
-            final int from) throws InterruptedException, IOException, HttpException, PoolException {
+            final int from) throws Exception {
         return client(node).put(path(key, ack, from), data);
     }
 }
