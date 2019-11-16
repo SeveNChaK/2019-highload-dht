@@ -1,6 +1,7 @@
 package ru.mail.polis.service.alex;
 
 import com.google.common.base.Charsets;
+import one.nio.http.HttpSession;
 import one.nio.http.Response;
 import org.jetbrains.annotations.NotNull;
 import org.slf4j.Logger;
@@ -47,50 +48,59 @@ final class HttpService {
                 .build();
     }
 
-    @NotNull
-    Response get(@NotNull final MetaRequest meta) {
+    void get(@NotNull final HttpSession session,
+             @NotNull final MetaRequest meta) {
         if (meta.proxied()) {
             try {
-                return ServiceValue.transform(
+                final var response = ServiceValue.transform(
                         ServiceValue.from(dao.getValue(ByteBuffer.wrap(meta.getId().getBytes(Charsets.UTF_8)))),
                         true);
+                sendResponse(session, response);
+                return;
             } catch (IOException e) {
-                return new Response(Response.INTERNAL_ERROR, Response.EMPTY);
+                sendResponse(session, new Response(Response.INTERNAL_ERROR, Response.EMPTY));
+                return;
             }
         }
 
         final var replicas = topology.replicas(
                 ByteBuffer.wrap(meta.getId().getBytes(Charsets.UTF_8)), meta.getRf().getFrom());
-        int acks = 0;
+
+        final var acks = new AtomicInteger(0);
         final var values = new ArrayList<ServiceValue>();
         if (replicas.contains(topology.whoAmI())) {
             try {
                 values.add(ServiceValue.from(
                         dao.getValue(ByteBuffer.wrap(meta.getId().getBytes(Charsets.UTF_8)))));
-                acks++;
+                acks.incrementAndGet();
             } catch (IOException e) {
                 log.error("[{}] Can't get {}", topology.whoAmI(), meta.getId(), e);
             }
         }
-        if (acks == meta.getRf().getAck()) {
-            return ServiceValue.transform(ServiceValue.merge(values), false);
+        if (acks.get() == meta.getRf().getAck()) {
+            sendResponse(session, ServiceValue.transform(ServiceValue.merge(values), false));
+            return;
         }
-        for (final var response : getResponsesFromReplicas(replicas, meta)) {
-            try {
-                values.add(ServiceValue.from(response));
-                acks++;
-                if (acks == meta.getRf().getAck()) {
-                    return ServiceValue.transform(ServiceValue.merge(values), false);
-                }
-            } catch (IllegalArgumentException e) {
-                log.error("[{}] Bad response", topology.whoAmI(), e);
-            }
-        }
-        return new Response(Response.GATEWAY_TIMEOUT, Response.EMPTY);
+        getResponsesFromReplicas(replicas, meta)
+                .whenCompleteAsync((responses, failure) -> {
+                    for (final var response : responses) {
+                        values.add(ServiceValue.from(response));
+                        acks.incrementAndGet();
+                        if (acks.get() == meta.getRf().getAck()) {
+                            sendResponse(session, ServiceValue.transform(ServiceValue.merge(values), false));
+                            return;
+                        }
+                    }
+                    sendResponse(session, new Response(Response.GATEWAY_TIMEOUT, Response.EMPTY));
+                })
+                .exceptionally(ex -> {
+                    log.error("Failed to get response from node", ex);
+                    return null;
+                });
     }
 
-    @NotNull
-    Response upsert(@NotNull final MetaRequest meta) {
+    void upsert(@NotNull final HttpSession session,
+                @NotNull final MetaRequest meta) {
         if (meta.proxied()) {
             try {
                 final var metaId = meta.getId();
@@ -98,83 +108,108 @@ final class HttpService {
                 final var byteBufferMeta = ByteBuffer.wrap(bytesMeta);
                 final var metaValue = meta.getValue();
                 dao.upsert(byteBufferMeta, metaValue);
-                return new Response(Response.CREATED, Response.EMPTY);
+                sendResponse(session, new Response(Response.CREATED, Response.EMPTY));
+                return;
             } catch (NoSuchElementException e) {
-                return new Response(Response.NOT_FOUND, Response.EMPTY);
+                sendResponse(session, new Response(Response.NOT_FOUND, Response.EMPTY));
+                return;
             } catch (IOException e) {
-                return new Response(Response.INTERNAL_ERROR, Response.EMPTY);
+                sendResponse(session, new Response(Response.INTERNAL_ERROR, Response.EMPTY));
+                return;
             }
         }
 
         final var replicas = topology.replicas(
                 ByteBuffer.wrap(meta.getId().getBytes(Charsets.UTF_8)), meta.getRf().getFrom());
 
-        int acks = 0;
+        final var acks = new AtomicInteger(0);
         if (replicas.contains(topology.whoAmI())) {
             try {
                 dao.upsert(ByteBuffer.wrap(meta.getId().getBytes(Charsets.UTF_8)), meta.getValue());
-                acks++;
+                acks.incrementAndGet();
             } catch (IOException e) {
                 log.error("[{}] Can't upsert {}={}",
                         topology.whoAmI(), meta.getId(), meta.getValue(), e);
             }
         }
-        if (acks >= meta.getRf().getAck()) {
-            return new Response(Response.CREATED, Response.EMPTY);
+        if (acks.get() == meta.getRf().getAck()) {
+            sendResponse(session, new Response(Response.CREATED, Response.EMPTY));
+            return;
         }
-        for (final var response : getResponsesFromReplicas(replicas, meta)) {
-            if (response.statusCode() == 201) {
-                acks++;
-                if (acks == meta.getRf().getAck()) {
-                    return new Response(Response.CREATED, Response.EMPTY);
-                }
-            }
-        }
-        return new Response(Response.GATEWAY_TIMEOUT, Response.EMPTY);
+        getResponsesFromReplicas(replicas, meta)
+                .whenCompleteAsync((responses, failure) -> {
+                    for (final var response : responses) {
+                        if (response.statusCode() == 201) {
+                            acks.incrementAndGet();
+                            if (acks.get() == meta.getRf().getAck()) {
+                                sendResponse(session, new Response(Response.CREATED, Response.EMPTY));
+                                return ;
+                            }
+                        }
+                    }
+                    sendResponse(session, new Response(Response.GATEWAY_TIMEOUT, Response.EMPTY));
+                })
+                .exceptionally(ex -> {
+                    log.error("Failed to get response from node", ex);
+                    return null;
+                });
     }
 
-    @NotNull
-    Response delete(@NotNull final MetaRequest meta) {
+    void delete(@NotNull final HttpSession session,
+                @NotNull final MetaRequest meta) {
         if (meta.proxied()) {
             try {
                 dao.remove(ByteBuffer.wrap(meta.getId().getBytes(Charsets.UTF_8)));
-                return new Response(Response.ACCEPTED, Response.EMPTY);
+                sendResponse(session, new Response(Response.ACCEPTED, Response.EMPTY));
+                return;
             } catch (NoSuchElementException e) {
-                return new Response(Response.NOT_FOUND, Response.EMPTY);
+                sendResponse(session, new Response(Response.NOT_FOUND, Response.EMPTY));
+                return;
             } catch (IOException e) {
-                return new Response(Response.INTERNAL_ERROR, Response.EMPTY);
+                sendResponse(session, new Response(Response.INTERNAL_ERROR, Response.EMPTY));
+                return;
             }
         }
 
         final var replicas = topology.replicas(
                 ByteBuffer.wrap(meta.getId().getBytes(Charsets.UTF_8)), meta.getRf().getFrom());
 
-        int acks = 0;
+        final var acks = new AtomicInteger(0);
         if (replicas.contains(topology.whoAmI())) {
             try {
                 dao.remove(ByteBuffer.wrap(meta.getId().getBytes(Charsets.UTF_8)));
-                acks++;
+                acks.incrementAndGet();
             } catch (IOException e) {
                 log.error("[{}] Can't remove {}={}",
                         topology.whoAmI(), meta.getId(), meta.getValue(), e);
             }
         }
-        if (acks == meta.getRf().getAck()) {
-            return new Response(Response.ACCEPTED, Response.EMPTY);
+        if (acks.get() == meta.getRf().getAck()) {
+            sendResponse(session, new Response(Response.ACCEPTED, Response.EMPTY));
+            return;
         }
-        for (final var response : getResponsesFromReplicas(replicas, meta)) {
-            if (response.statusCode() == 202) {
-                acks++;
-                if (acks == meta.getRf().getAck()) {
-                    return new Response(Response.ACCEPTED, Response.EMPTY);
-                }
-            }
-        }
-        return new Response(Response.GATEWAY_TIMEOUT, Response.EMPTY);
+        getResponsesFromReplicas(replicas, meta)
+                .whenCompleteAsync((responses, failure) -> {
+                    for (final var response : responses) {
+                        if (response.statusCode() == 202) {
+                            acks.incrementAndGet();
+                            if (acks.get() >= meta.getRf().getAck()) {
+                                sendResponse(session, new Response(Response.ACCEPTED, Response.EMPTY));
+                                return ;
+                            }
+                        }
+                    }
+                    sendResponse(session, new Response(Response.GATEWAY_TIMEOUT, Response.EMPTY));
+                })
+                .exceptionally(ex -> {
+                    log.error("Failed to get responses", ex);
+                    return null;
+                });
     }
 
-    private List<HttpResponse<byte[]>> getResponsesFromReplicas(@NotNull final List<String> replicas,
-                                                                @NotNull final MetaRequest meta) {
+    private CompletableFuture<List<HttpResponse<byte[]>>> getResponsesFromReplicas(
+            @NotNull final List<String> replicas,
+            @NotNull final MetaRequest meta) {
         final int acks = replicas.remove(topology.whoAmI())
                 ? meta.getRf().getAck() - 1
                 : meta.getRf().getAck();
@@ -201,14 +236,13 @@ final class HttpService {
                         throw new IllegalArgumentException("Service doesn't support method "
                                 + meta.getMethod());
                 }
-                final var request = requestBuilder.build();
                 futures.add(httpClient.sendAsync(
-                        request,
+                        requestBuilder.build(),
                         HttpResponse.BodyHandlers.ofByteArray()));
             }
-            return getFirstResponses(futures, acks).join();
+            return getFirstResponses(futures, acks);
         }
-        return Collections.emptyList();
+        return CompletableFuture.completedFuture(Collections.emptyList());
     }
 
     @SuppressWarnings("FutureReturnValueIgnored")
@@ -226,11 +260,11 @@ final class HttpService {
         final BiConsumer<T,Throwable> biConsumer = (value, failure) -> {
             log.info("{}", value);
             if ((failure != null || value == null) && fails.incrementAndGet() > maxFails) {
-                result.complete(Collections.unmodifiableList(responses));
+                result.complete(responses);
             } else if (!result.isDone() && value != null) {
                 responses.add(value);
                 if (responses.size() == acks) {
-                    result.complete(Collections.unmodifiableList(responses));
+                    result.complete(responses);
                 }
             }
         };
@@ -243,5 +277,18 @@ final class HttpService {
                     });
         }
         return result;
+    }
+
+    static void sendResponse(@NotNull final HttpSession session,
+                                     @NotNull final Response response) {
+        try {
+            session.sendResponse(response);
+        } catch (IOException e) {
+            try {
+                session.sendError(Response.INTERNAL_ERROR, "Internal error");
+            } catch (IOException ex) {
+                log.error("Error with send response {}", ex.getMessage());
+            }
+        }
     }
 }
