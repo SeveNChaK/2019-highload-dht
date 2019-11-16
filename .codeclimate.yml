@@ -5,7 +5,7 @@ plugins:
     config:
       file: "checkstyle.xml"
   pmd:
-    enabled: true
+    enabled: false
     config:
       rules:
         - "java-basic"
