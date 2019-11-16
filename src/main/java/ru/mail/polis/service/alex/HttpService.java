@@ -93,7 +93,8 @@ final class HttpService {
     Response upsert(@NotNull final MetaRequest meta) {
         if (meta.proxied()) {
             try {
-                dao.upsert(ByteBuffer.wrap(meta.getId().getBytes(Charsets.UTF_8)), meta.getValue());
+                final var metaId = meta.getId();
+                dao.upsert(ByteBuffer.wrap(metaId.getBytes(Charsets.UTF_8)), meta.getValue());
                 return new Response(Response.CREATED, Response.EMPTY);
             } catch (NoSuchElementException e) {
                 return new Response(Response.NOT_FOUND, Response.EMPTY);
