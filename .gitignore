@@ -17,8 +17,10 @@
 !wrk/output/stage_2/*
 !wrk/output/stage_3/*
 !wrk/output/stage_4/*
+!wrk/output/stage_5/*
 !profiler/stage_3/*
 !profiler/stage_4/*
+!profiler/stage_5/*
 
 # ...even if they are in subdirectories
 !*/
