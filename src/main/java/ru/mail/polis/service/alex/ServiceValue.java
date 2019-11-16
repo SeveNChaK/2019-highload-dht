@@ -5,12 +5,13 @@ import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 import ru.mail.polis.dao.alex.Value;
 
+import java.net.http.HttpResponse;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.Objects;
 
 final class ServiceValue implements Comparable<ServiceValue> {
-    private static final String TIMESTAMP_HEADER = "X-OK-Timestamp: ";
+    private static final String TIMESTAMP_HEADER_NAME = "X-OK-Timestamp";
     private static final ServiceValue ABSENT = new ServiceValue(null, -1, State.ABSENT);
 
     @Nullable private final byte[] data;
@@ -42,14 +43,15 @@ final class ServiceValue implements Comparable<ServiceValue> {
     }
 
     @NotNull
-    public static ServiceValue from(@NotNull final Response response) {
-        final var timestamp = response.getHeader(TIMESTAMP_HEADER);
-        if (response.getStatus() == 200) {
+    public static ServiceValue from(@NotNull final HttpResponse<byte[]> response) {
+        final var headers = response.headers();
+        final var timestamp = headers.firstValue(TIMESTAMP_HEADER_NAME.toLowerCase()).orElse(null);
+        if (response.statusCode() == 200) {
             if (timestamp == null) {
                 throw new IllegalArgumentException("Wrong input data. Timestamp is absent.");
             }
-            return present(response.getBody(), Long.parseLong(timestamp));
-        } else if (response.getStatus() == 404) {
+            return present(response.body(), Long.parseLong(timestamp));
+        } else if (response.statusCode() == 404) {
             if (timestamp == null) {
                 return absent();
             } else {
@@ -83,13 +85,13 @@ final class ServiceValue implements Comparable<ServiceValue> {
             case PRESENT:
                 result = new Response(Response.OK, Objects.requireNonNull(serviceValue.getData()));
                 if (proxied) {
-                    result.addHeader(TIMESTAMP_HEADER + serviceValue.getTimestamp());
+                    result.addHeader(TIMESTAMP_HEADER_NAME + ": " + serviceValue.getTimestamp());
                 }
                 return result;
             case REMOVED:
                 result = new Response(Response.NOT_FOUND, Response.EMPTY);
                 if (proxied) {
-                    result.addHeader(TIMESTAMP_HEADER + serviceValue.getTimestamp());
+                    result.addHeader(TIMESTAMP_HEADER_NAME + ": " + serviceValue.getTimestamp());
                 }
                 return result;
             case ABSENT:
