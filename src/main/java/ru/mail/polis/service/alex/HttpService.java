@@ -11,7 +11,7 @@ import org.jetbrains.annotations.NotNull;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import ru.mail.polis.dao.DAO;
-import ru.mail.polis.dao.alex.AlexDAO;
+import ru.mail.polis.dao.alex.LSMDao;
 
 import java.io.IOException;
 import java.nio.ByteBuffer;
@@ -31,7 +31,7 @@ final class HttpService {
     static final String PROXY_HEADER = "X-OK-Proxy: true";
 
     @NotNull private final CompletionService<Response> proxyService;
-    @NotNull private final AlexDAO dao;
+    @NotNull private final LSMDao dao;
     @NotNull private final Topology<String> topology;
     @NotNull private final Map<String, HttpClient> pool;
 
@@ -39,7 +39,7 @@ final class HttpService {
                 @NotNull final DAO dao,
                 @NotNull final Topology<String> topology) {
         this.proxyService = new ExecutorCompletionService<>(proxyWorkers);
-        this.dao = (AlexDAO) dao;
+        this.dao = (LSMDao) dao;
         this.topology = topology;
         this.pool = new HashMap<>();
         for (final var node : topology.all()) {
@@ -75,20 +75,21 @@ final class HttpService {
                 log.error("[{}] Can't get {}", topology.whoAmI(), meta.getId(), e);
             }
         }
-
+        if (acks == meta.getRf().getAck()) {
+            return ServiceValue.transform(ServiceValue.merge(values), false);
+        }
         for (final var response : getResponsesFromRelicas(replicas, meta)) {
             try {
                 values.add(ServiceValue.from(response));
                 acks++;
+                if (acks == meta.getRf().getAck()) {
+                    return ServiceValue.transform(ServiceValue.merge(values), false);
+                }
             } catch (IllegalArgumentException e) {
                 log.error("[{}] Bad response", topology.whoAmI(), e);
             }
         }
-        if (acks >= meta.getRf().getAck()) {
-            return ServiceValue.transform(ServiceValue.merge(values), false);
-        } else {
-            return new Response(Response.GATEWAY_TIMEOUT, Response.EMPTY);
-        }
+        return new Response(Response.GATEWAY_TIMEOUT, Response.EMPTY);
     }
 
     @NotNull
@@ -117,18 +118,18 @@ final class HttpService {
                         topology.whoAmI(), meta.getId(), meta.getValue(), e);
             }
         }
-
+        if (acks >= meta.getRf().getAck()) {
+            return new Response(Response.CREATED, Response.EMPTY);
+        }
         for (final var response : getResponsesFromRelicas(replicas, meta)) {
             if (response.getStatus() == 201) {
                 acks++;
+                if (acks == meta.getRf().getAck()) {
+                    return new Response(Response.CREATED, Response.EMPTY);
+                }
             }
         }
-
-        if (acks >= meta.getRf().getAck()) {
-            return new Response(Response.CREATED, Response.EMPTY);
-        } else {
-            return new Response(Response.GATEWAY_TIMEOUT, Response.EMPTY);
-        }
+        return new Response(Response.GATEWAY_TIMEOUT, Response.EMPTY);
     }
 
     @NotNull
@@ -157,18 +158,18 @@ final class HttpService {
                         topology.whoAmI(), meta.getId(), meta.getValue(), e);
             }
         }
-
+        if (acks == meta.getRf().getAck()) {
+            return new Response(Response.ACCEPTED, Response.EMPTY);
+        }
         for (final var response : getResponsesFromRelicas(replicas, meta)) {
             if (response.getStatus() == 202) {
                 acks++;
+                if (acks == meta.getRf().getAck()) {
+                    return new Response(Response.ACCEPTED, Response.EMPTY);
+                }
             }
         }
-
-        if (acks >= meta.getRf().getAck()) {
-            return new Response(Response.ACCEPTED, Response.EMPTY);
-        } else {
-            return new Response(Response.GATEWAY_TIMEOUT, Response.EMPTY);
-        }
+        return new Response(Response.GATEWAY_TIMEOUT, Response.EMPTY);
     }
 
     @NotNull

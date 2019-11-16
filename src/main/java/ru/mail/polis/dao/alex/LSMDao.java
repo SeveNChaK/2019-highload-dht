@@ -5,6 +5,8 @@ import com.google.common.collect.Iterables;
 import com.google.common.collect.Iterators;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import ru.mail.polis.Record;
 import ru.mail.polis.dao.DAO;
 
@@ -28,7 +30,8 @@ import static ru.mail.polis.dao.alex.Constants.REGEX;
 import static ru.mail.polis.dao.alex.Constants.PREFIX;
 import static ru.mail.polis.dao.alex.Constants.SUFFIX;
 
-public class AlexDAO implements DAO {
+public class LSMDao implements DAO {
+    private static final Logger log = LoggerFactory.getLogger(LSMDao.class);
 
     private final ReadWriteLock lock = new ReentrantReadWriteLock();
 
@@ -38,10 +41,9 @@ public class AlexDAO implements DAO {
 
     class FlushingTask implements Runnable {
 
-        @SuppressWarnings("CatchAndPrintStackTrace")
         @Override
         public void run() {
-            TableToFlush tableToFlush;
+            TableToFlush tableToFlush = null;
             try {
                 tableToFlush = memTablePool.takeToFlush();
                 final long serialNumber = tableToFlush.getIndex();
@@ -62,12 +64,12 @@ public class AlexDAO implements DAO {
             } catch (InterruptedException e) {
                 Thread.currentThread().interrupt();
             } catch (IOException e) {
-                e.printStackTrace();
+                log.error("Error while flush generation " + tableToFlush.getIndex(), e);
             }
         }
     }
 
-    public AlexDAO(
+    public LSMDao(
             final long maxHeap,
             @NotNull final File rootDir) throws IOException {
         this(maxHeap, rootDir, Runtime.getRuntime().availableProcessors() + 1);
@@ -80,7 +82,7 @@ public class AlexDAO implements DAO {
      * @param rootDir the folder in which files will be written and read
      * @throws IOException if an I/O error is thrown by a File walker
      */
-    public AlexDAO(final long maxHeap, @NotNull final File rootDir, final int threadsToFlush) throws IOException {
+    public LSMDao(final long maxHeap, @NotNull final File rootDir, final int threadsToFlush) throws IOException {
         this.rootDir = rootDir;
 
         final var indexSStable = new AtomicLong();

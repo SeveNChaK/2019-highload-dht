@@ -46,7 +46,7 @@ final class ServiceValue implements Comparable<ServiceValue> {
         final var timestamp = response.getHeader(TIMESTAMP_HEADER);
         if (response.getStatus() == 200) {
             if (timestamp == null) {
-                throw new IllegalArgumentException("Wrong input data");
+                throw new IllegalArgumentException("Wrong input data. Timestamp is absent.");
             }
             return present(response.getBody(), Long.parseLong(timestamp));
         } else if (response.getStatus() == 404) {

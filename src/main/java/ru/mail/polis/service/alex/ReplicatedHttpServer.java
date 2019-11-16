@@ -14,7 +14,7 @@ import org.jetbrains.annotations.NotNull;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import ru.mail.polis.dao.DAO;
-import ru.mail.polis.dao.alex.AlexDAO;
+import ru.mail.polis.dao.alex.LSMDao;
 import ru.mail.polis.service.Service;
 
 import java.io.IOException;
@@ -28,7 +28,7 @@ public class ReplicatedHttpServer extends HttpServer implements Service {
     private static final Logger log = LoggerFactory.getLogger(ReplicatedHttpServer.class);
 
     @NotNull private final Topology<String> topology;
-    @NotNull private final AlexDAO dao;
+    @NotNull private final LSMDao dao;
     @NotNull private final Executor serverWorkers;
     @NotNull private final RF defaultRF;
     @NotNull private final HttpService httpService;
@@ -48,7 +48,7 @@ public class ReplicatedHttpServer extends HttpServer implements Service {
                                 @NotNull final Executor proxyWorkers) throws IOException {
         super(getConfig(port));
         this.topology = topology;
-        this.dao = (AlexDAO) dao;
+        this.dao = (LSMDao) dao;
         this.serverWorkers = workers;
 
         final var nodes = topology.all();

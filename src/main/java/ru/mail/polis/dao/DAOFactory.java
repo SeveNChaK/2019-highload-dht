@@ -17,7 +17,7 @@
 package ru.mail.polis.dao;
 
 import org.jetbrains.annotations.NotNull;
-import ru.mail.polis.dao.alex.AlexDAO;
+import ru.mail.polis.dao.alex.LSMDao;
 
 import java.io.File;
 import java.io.IOException;
@@ -55,6 +55,6 @@ public final class DAOFactory {
             throw new IllegalArgumentException("Path is not a directory: " + data);
         }
 
-        return new AlexDAO(FLUSH_THRESHOLD, data);
+        return new LSMDao(FLUSH_THRESHOLD, data);
     }
 }
