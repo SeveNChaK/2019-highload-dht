@@ -17,6 +17,7 @@ import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.NoSuchElementException;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Executor;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Supplier;
@@ -68,6 +69,7 @@ final class HttpService {
             sendResponse(session, ServiceValue.transform(ServiceValue.merge(values), false));
             return;
         }
+
         getResponsesFromReplicas(httpClient, topology, replicas, meta)
                 .whenCompleteAsync((responses, failure) -> {
                     for (final var response : responses) {
@@ -150,7 +152,9 @@ final class HttpService {
             sendResponse(session, new Response(Response.ACCEPTED, Response.EMPTY));
             return;
         }
-        getResponsesFromReplicas(httpClient, topology, replicas, meta)
+        CompletableFuture<List<HttpResponse<byte[]>>> responseFromRplicas
+                = getResponsesFromReplicas(httpClient, topology, replicas, meta);
+        responseFromRplicas
                 .whenCompleteAsync((responses, failure) -> {
                     sendResponseIfNecessary(
                             acks.get(),
@@ -187,31 +191,36 @@ final class HttpService {
     private void executeIfProxied(@NotNull final HttpSession session,
                                   @NotNull final MetaRequest meta,
                                   @NotNull final Method method) {
-        try {
-            switch (method) {
-                case GET:
-                    final var response = ServiceValue.transform(
-                            ServiceValue.from(dao.getValue(ByteBuffer.wrap(meta.getId().getBytes(Charsets.UTF_8)))),
-                            true);
-                    sendResponse(session, response);
-                    break;
-                case UPSERT:
-                    dao.upsert(ByteBuffer.wrap(meta.getId().getBytes(Charsets.UTF_8)), meta.getValue());
-                    sendResponse(session, createEmptyResponse(Response.CREATED));
-                    break;
-                case DELETE:
-                    dao.remove(ByteBuffer.wrap(meta.getId().getBytes(Charsets.UTF_8)));
-                    sendResponse(session, new Response(Response.ACCEPTED, Response.EMPTY));
-                    break;
-                default:
-                    log.error("Invalid method");
-                    break;
+        CompletableFuture.runAsync(() -> {
+            try {
+                switch (method) {
+                    case GET:
+                        final var response = ServiceValue.transform(
+                                ServiceValue.from(dao.getValue(ByteBuffer.wrap(meta.getId().getBytes(Charsets.UTF_8)))),
+                                true);
+                        sendResponse(session, response);
+                        break;
+                    case UPSERT:
+                        dao.upsert(ByteBuffer.wrap(meta.getId().getBytes(Charsets.UTF_8)), meta.getValue());
+                        sendResponse(session, createEmptyResponse(Response.CREATED));
+                        break;
+                    case DELETE:
+                        dao.remove(ByteBuffer.wrap(meta.getId().getBytes(Charsets.UTF_8)));
+                        sendResponse(session, new Response(Response.ACCEPTED, Response.EMPTY));
+                        break;
+                    default:
+                        log.error("Invalid method");
+                        break;
+                }
+            } catch (NoSuchElementException e) {
+                sendResponse(session, createEmptyResponse(Response.NOT_FOUND));
+            } catch (IOException e) {
+                sendResponse(session, createEmptyResponse(Response.INTERNAL_ERROR));
             }
-        } catch (NoSuchElementException e) {
-            sendResponse(session, createEmptyResponse(Response.NOT_FOUND));
-        } catch (IOException e) {
-            sendResponse(session, createEmptyResponse(Response.INTERNAL_ERROR));
-        }
+        }).exceptionally(ex -> {
+            log.error("Failed", ex);
+            return null;
+        });
     }
 
     private enum Method {
