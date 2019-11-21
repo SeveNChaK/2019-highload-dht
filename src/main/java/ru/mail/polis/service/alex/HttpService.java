@@ -117,10 +117,9 @@ final class HttpService {
         for (final var response : getResponsesFromRelicas(replicas, meta)) {
             if (response.getStatus() == 201) {
                 acks++;
-                continue;
-            }
-            if (acks == meta.getRf().getAck()) {
-                return createEmptyResponse(Response.CREATED);
+                if (acks == meta.getRf().getAck()) {
+                    return createEmptyResponse(Response.CREATED);
+                }
             }
         }
         return createEmptyResponse(Response.GATEWAY_TIMEOUT);
