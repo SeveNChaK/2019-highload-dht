@@ -102,7 +102,8 @@ final class HttpService {
     void upsert(@NotNull final HttpSession session,
                 @NotNull final MetaRequest meta) {
         if (meta.proxied()) {
-            return needProxy(meta);
+            needUpsertProxy(session, meta);
+            return;
         }
 
         final var replicas = topology.replicas(
@@ -136,20 +137,20 @@ final class HttpService {
                     sendResponse(session, new Response(Response.GATEWAY_TIMEOUT, Response.EMPTY));
                 })
                 .exceptionally(ex -> {
-                    log.error("Failed to get response from node", ex);
+                    log.error("Failed to upsert response from node", ex);
                     return null;
                 });
     }
 
-    @NotNull
-    private Response needProxy(@NotNull final MetaRequest meta) {
+    private void needUpsertProxy(@NotNull final HttpSession session,
+                                 @NotNull final MetaRequest meta) {
         try {
             dao.upsert(ByteBuffer.wrap(meta.getId().getBytes(Charsets.UTF_8)), meta.getValue());
-            return createEmptyResponse(Response.CREATED);
+            sendResponse(session, createEmptyResponse(Response.CREATED));
         } catch (NoSuchElementException e) {
-            return createEmptyResponse(Response.NOT_FOUND);
+            sendResponse(session, createEmptyResponse(Response.NOT_FOUND));
         } catch (IOException e) {
-            return createEmptyResponse(Response.INTERNAL_ERROR);
+            sendResponse(session, createEmptyResponse(Response.INTERNAL_ERROR));
         }
     }
 
@@ -275,7 +276,7 @@ final class HttpService {
             future.orTimeout(1, TimeUnit.SECONDS)
                     .whenCompleteAsync(biConsumer)
                     .exceptionally(ex -> {
-                        log.error("Failed to get response from node", ex);
+                        log.error("Failed to get response", ex);
                         return null;
                     });
         }
