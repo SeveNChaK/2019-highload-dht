@@ -114,13 +114,13 @@ final class HttpService {
         }
         getResponsesFromReplicas(httpClient, topology, replicas, meta)
                 .whenCompleteAsync((responses, failure) -> {
-                    sendResponseIfNecessary(
+                    Response response = sendResponseIfNecessary(
                             acks.get(),
-                            session,
                             meta,
                             responses,
                             statusCode -> statusCode == 201,
                             () -> new Response(Response.CREATED, Response.EMPTY));
+                    sendResponse(session, response);
                 })
                 .exceptionally(ex -> {
                     log.error("Failed to upsert response from node", ex);
@@ -156,13 +156,13 @@ final class HttpService {
                 = getResponsesFromReplicas(httpClient, topology, replicas, meta);
         responseFromRplicas
                 .whenCompleteAsync((responses, failure) -> {
-                    sendResponseIfNecessary(
+                    Response response = sendResponseIfNecessary(
                             acks.get(),
-                            session,
                             meta,
                             responses,
                             statusCode -> statusCode == 202,
                             () -> new Response(Response.ACCEPTED, Response.EMPTY));
+                    sendResponse(session, response);
                 })
                 .exceptionally(ex -> {
                     log.error("Failed to get responses", ex);
@@ -170,8 +170,8 @@ final class HttpService {
                 });
     }
 
-    private void sendResponseIfNecessary(int acks,
-                                         @NotNull final HttpSession session,
+    @NotNull
+    private Response sendResponseIfNecessary(int acks,
                                          @NotNull final MetaRequest meta,
                                          @NotNull final List<HttpResponse<byte[]>> responses,
                                          @NotNull final Predicate<Integer> predicate,
@@ -180,12 +180,11 @@ final class HttpService {
             if (predicate.test(response.statusCode())) {
                 acks++;
                 if (acks >= meta.getRf().getAck()) {
-                    sendResponse(session, supplier.get());
-                    return;
+                    return supplier.get();
                 }
             }
         }
-        sendResponse(session, new Response(Response.GATEWAY_TIMEOUT, Response.EMPTY));
+        return new Response(Response.GATEWAY_TIMEOUT, Response.EMPTY);
     }
 
     private void executeIfProxied(@NotNull final HttpSession session,
