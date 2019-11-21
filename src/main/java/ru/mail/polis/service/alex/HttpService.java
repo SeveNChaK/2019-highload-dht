@@ -94,20 +94,8 @@ final class HttpService {
 
     @NotNull
     Response upsert(@NotNull final MetaRequest meta) {
-        Response result = null;
         if (meta.proxied()) {
-            try {
-                dao.upsert(ByteBuffer.wrap(meta.getId().getBytes(Charsets.UTF_8)), meta.getValue());
-                result = createResponse(Response.CREATED);
-            } catch (NoSuchElementException e) {
-                result = createResponse(Response.NOT_FOUND);
-            } catch (IOException e) {
-                result = createResponse(Response.INTERNAL_ERROR);
-            }
-        }
-
-        if (result != null){
-            return result;
+            return needProxy(meta);
         }
 
         final var replicas = topology.replicas(
@@ -124,26 +112,34 @@ final class HttpService {
             }
         }
         if (acks >= meta.getRf().getAck()) {
-            result = createResponse(Response.CREATED);
-        } else {
-            for (final var response : getResponsesFromRelicas(replicas, meta)) {
-                if (response.getStatus() == 201) {
-                    acks++;
-                    if (acks == meta.getRf().getAck()) {
-                        result = createResponse(Response.CREATED);
-                        break;
-                    }
-                }
+            return createEmptyResponse(Response.CREATED);
+        }
+        for (final var response : getResponsesFromRelicas(replicas, meta)) {
+            if (response.getStatus() == 201) {
+                acks++;
+                continue;
+            }
+            if (acks == meta.getRf().getAck()) {
+                return createEmptyResponse(Response.CREATED);
             }
         }
-        if (result == null){
-            result = createResponse(Response.GATEWAY_TIMEOUT);
-        }
-        return result;
+        return createEmptyResponse(Response.GATEWAY_TIMEOUT);
     }
 
     @NotNull
-    private Response createResponse(final String resultCode){
+    private Response needProxy(@NotNull final MetaRequest meta) {
+        try {
+            dao.upsert(ByteBuffer.wrap(meta.getId().getBytes(Charsets.UTF_8)), meta.getValue());
+            return createEmptyResponse(Response.CREATED);
+        } catch (NoSuchElementException e) {
+            return createEmptyResponse(Response.NOT_FOUND);
+        } catch (IOException e) {
+            return createEmptyResponse(Response.INTERNAL_ERROR);
+        }
+    }
+
+    @NotNull
+    private Response createEmptyResponse(final String resultCode) {
         return new Response(resultCode, Response.EMPTY);
     }
 
