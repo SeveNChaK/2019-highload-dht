@@ -1,6 +1,7 @@
 package ru.mail.polis.service.alex;
 
 import com.google.common.base.Charsets;
+import com.google.common.base.Predicate;
 import one.nio.http.HttpSession;
 import one.nio.http.Response;
 import org.jetbrains.annotations.NotNull;
@@ -11,14 +12,18 @@ import ru.mail.polis.dao.alex.LSMDao;
 
 import java.io.IOException;
 import java.net.http.HttpClient;
+import java.net.http.HttpResponse;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
+import java.util.List;
 import java.util.NoSuchElementException;
 import java.util.concurrent.Executor;
 import java.util.concurrent.atomic.AtomicInteger;
-import java.util.function.Consumer;
+import java.util.function.Supplier;
 
-import static ru.mail.polis.service.alex.HttpServiceUtils.*;
+import static ru.mail.polis.service.alex.HttpServiceUtils.sendResponse;
+import static ru.mail.polis.service.alex.HttpServiceUtils.createEmptyResponse;
+import static ru.mail.polis.service.alex.HttpServiceUtils.getResponsesFromReplicas;
 
 final class HttpService {
     private static final Logger log = LoggerFactory.getLogger(HttpService.class);
@@ -107,16 +112,13 @@ final class HttpService {
         }
         getResponsesFromReplicas(httpClient, topology, replicas, meta)
                 .whenCompleteAsync((responses, failure) -> {
-                    for (final var response : responses) {
-                        if (response.statusCode() == 201) {
-                            acks.incrementAndGet();
-                            if (acks.get() == meta.getRf().getAck()) {
-                                sendResponse(session, new Response(Response.CREATED, Response.EMPTY));
-                                return;
-                            }
-                        }
-                    }
-                    sendResponse(session, new Response(Response.GATEWAY_TIMEOUT, Response.EMPTY));
+                    sendResponseIfNecessary(
+                            acks.get(),
+                            session,
+                            meta,
+                            responses,
+                            statusCode -> statusCode == 201,
+                            () -> new Response(Response.CREATED, Response.EMPTY));
                 })
                 .exceptionally(ex -> {
                     log.error("Failed to upsert response from node", ex);
@@ -150,21 +152,36 @@ final class HttpService {
         }
         getResponsesFromReplicas(httpClient, topology, replicas, meta)
                 .whenCompleteAsync((responses, failure) -> {
-                    for (final var response : responses) {
-                        if (response.statusCode() == 202) {
-                            acks.incrementAndGet();
-                            if (acks.get() >= meta.getRf().getAck()) {
-                                sendResponse(session, new Response(Response.ACCEPTED, Response.EMPTY));
-                                return;
-                            }
-                        }
-                    }
-                    sendResponse(session, new Response(Response.GATEWAY_TIMEOUT, Response.EMPTY));
+                    sendResponseIfNecessary(
+                            acks.get(),
+                            session,
+                            meta,
+                            responses,
+                            statusCode -> statusCode == 202,
+                            () -> new Response(Response.ACCEPTED, Response.EMPTY));
                 })
                 .exceptionally(ex -> {
                     log.error("Failed to get responses", ex);
                     return null;
                 });
+    }
+
+    private void sendResponseIfNecessary(int acks,
+                                         @NotNull final HttpSession session,
+                                         @NotNull final MetaRequest meta,
+                                         @NotNull final List<HttpResponse<byte[]>> responses,
+                                         @NotNull final Predicate<Integer> predicate,
+                                         @NotNull final Supplier<Response> supplier) {
+        for (final var response : responses) {
+            if (predicate.test(response.statusCode())) {
+                acks++;
+                if (acks >= meta.getRf().getAck()) {
+                    sendResponse(session, supplier.get());
+                    return;
+                }
+            }
+        }
+        sendResponse(session, new Response(Response.GATEWAY_TIMEOUT, Response.EMPTY));
     }
 
     private void executeIfProxied(@NotNull final HttpSession session,
@@ -185,6 +202,9 @@ final class HttpService {
                 case DELETE:
                     dao.remove(ByteBuffer.wrap(meta.getId().getBytes(Charsets.UTF_8)));
                     sendResponse(session, new Response(Response.ACCEPTED, Response.EMPTY));
+                    break;
+                default:
+                    log.error("Invalid method");
                     break;
             }
         } catch (NoSuchElementException e) {

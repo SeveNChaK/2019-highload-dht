@@ -26,6 +26,10 @@ public class HttpServiceUtils {
     private static final String PROXY_HEADER_VALUE = "true";
     static final String PROXY_HEADER = PROXY_HEADER_NAME + ": " + PROXY_HEADER_VALUE;
 
+    private HttpServiceUtils() {
+        throw new IllegalStateException("Utility class");
+    }
+
     static CompletableFuture<List<HttpResponse<byte[]>>> getResponsesFromReplicas(
             @NotNull final HttpClient httpClient,
             @NotNull final Topology<String> topology,
