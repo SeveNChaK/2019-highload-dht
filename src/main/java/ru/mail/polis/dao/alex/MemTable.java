@@ -44,7 +44,7 @@ public final class MemTable implements Table {
         final var prev = storage.put(key, Row.of(SERIAL_NUMBER, key, tombstone));
         if (prev == null) {
             sizeInBytes.addAndGet(Row.getSizeOfFlushedRow(key, tombstone.getData()));
-        } else if (!prev.getValue().isDead()){
+        } else if (!prev.getValue().isDead()) {
             sizeInBytes.addAndGet(-prev.getValue().getData().remaining());
         }
     }

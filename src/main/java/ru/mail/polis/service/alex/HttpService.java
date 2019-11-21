@@ -102,21 +102,7 @@ final class HttpService {
     void upsert(@NotNull final HttpSession session,
                 @NotNull final MetaRequest meta) {
         if (meta.proxied()) {
-            try {
-                final var metaId = meta.getId();
-                final var bytesMeta = metaId.getBytes(Charsets.UTF_8);
-                final var byteBufferMeta = ByteBuffer.wrap(bytesMeta);
-                final var metaValue = meta.getValue();
-                dao.upsert(byteBufferMeta, metaValue);
-                sendResponse(session, new Response(Response.CREATED, Response.EMPTY));
-                return;
-            } catch (NoSuchElementException e) {
-                sendResponse(session, new Response(Response.NOT_FOUND, Response.EMPTY));
-                return;
-            } catch (IOException e) {
-                sendResponse(session, new Response(Response.INTERNAL_ERROR, Response.EMPTY));
-                return;
-            }
+            return needProxy(meta);
         }
 
         final var replicas = topology.replicas(
@@ -153,6 +139,23 @@ final class HttpService {
                     log.error("Failed to get response from node", ex);
                     return null;
                 });
+    }
+
+    @NotNull
+    private Response needProxy(@NotNull final MetaRequest meta) {
+        try {
+            dao.upsert(ByteBuffer.wrap(meta.getId().getBytes(Charsets.UTF_8)), meta.getValue());
+            return createEmptyResponse(Response.CREATED);
+        } catch (NoSuchElementException e) {
+            return createEmptyResponse(Response.NOT_FOUND);
+        } catch (IOException e) {
+            return createEmptyResponse(Response.INTERNAL_ERROR);
+        }
+    }
+
+    @NotNull
+    private Response createEmptyResponse(final String resultCode) {
+        return new Response(resultCode, Response.EMPTY);
     }
 
     void delete(@NotNull final HttpSession session,
