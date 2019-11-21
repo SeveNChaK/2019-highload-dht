@@ -10,28 +10,18 @@ import ru.mail.polis.dao.DAO;
 import ru.mail.polis.dao.alex.LSMDao;
 
 import java.io.IOException;
-import java.net.URI;
 import java.net.http.HttpClient;
-import java.net.http.HttpRequest;
-import java.net.http.HttpResponse;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.NoSuchElementException;
-import java.util.List;
-import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.Executor;
-import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
-import java.util.function.BiConsumer;
+import java.util.function.Consumer;
+
+import static ru.mail.polis.service.alex.HttpServiceUtils.*;
 
 final class HttpService {
-
     private static final Logger log = LoggerFactory.getLogger(HttpService.class);
-    private static final String PROXY_HEADER_NAME = "X-OK-Proxy";
-    private static final String PROXY_HEADER_VALUE = "true";
-    static final String PROXY_HEADER = PROXY_HEADER_NAME + ": " + PROXY_HEADER_VALUE;
 
     @NotNull private final LSMDao dao;
     @NotNull private final Topology<String> topology;
@@ -51,16 +41,8 @@ final class HttpService {
     void get(@NotNull final HttpSession session,
              @NotNull final MetaRequest meta) {
         if (meta.proxied()) {
-            try {
-                final var response = ServiceValue.transform(
-                        ServiceValue.from(dao.getValue(ByteBuffer.wrap(meta.getId().getBytes(Charsets.UTF_8)))),
-                        true);
-                sendResponse(session, response);
-                return;
-            } catch (IOException e) {
-                sendResponse(session, new Response(Response.INTERNAL_ERROR, Response.EMPTY));
-                return;
-            }
+            executeIfProxied(session, meta, Method.GET);
+            return;
         }
 
         final var replicas = topology.replicas(
@@ -81,7 +63,7 @@ final class HttpService {
             sendResponse(session, ServiceValue.transform(ServiceValue.merge(values), false));
             return;
         }
-        getResponsesFromReplicas(replicas, meta)
+        getResponsesFromReplicas(httpClient, topology, replicas, meta)
                 .whenCompleteAsync((responses, failure) -> {
                     for (final var response : responses) {
                         values.add(ServiceValue.from(response));
@@ -102,7 +84,7 @@ final class HttpService {
     void upsert(@NotNull final HttpSession session,
                 @NotNull final MetaRequest meta) {
         if (meta.proxied()) {
-            needUpsertProxy(session, meta);
+            executeIfProxied(session, meta, Method.UPSERT);
             return;
         }
 
@@ -123,14 +105,14 @@ final class HttpService {
             sendResponse(session, new Response(Response.CREATED, Response.EMPTY));
             return;
         }
-        getResponsesFromReplicas(replicas, meta)
+        getResponsesFromReplicas(httpClient, topology, replicas, meta)
                 .whenCompleteAsync((responses, failure) -> {
                     for (final var response : responses) {
                         if (response.statusCode() == 201) {
                             acks.incrementAndGet();
                             if (acks.get() == meta.getRf().getAck()) {
                                 sendResponse(session, new Response(Response.CREATED, Response.EMPTY));
-                                return ;
+                                return;
                             }
                         }
                     }
@@ -142,37 +124,11 @@ final class HttpService {
                 });
     }
 
-    private void needUpsertProxy(@NotNull final HttpSession session,
-                                 @NotNull final MetaRequest meta) {
-        try {
-            dao.upsert(ByteBuffer.wrap(meta.getId().getBytes(Charsets.UTF_8)), meta.getValue());
-            sendResponse(session, createEmptyResponse(Response.CREATED));
-        } catch (NoSuchElementException e) {
-            sendResponse(session, createEmptyResponse(Response.NOT_FOUND));
-        } catch (IOException e) {
-            sendResponse(session, createEmptyResponse(Response.INTERNAL_ERROR));
-        }
-    }
-
-    @NotNull
-    private Response createEmptyResponse(final String resultCode) {
-        return new Response(resultCode, Response.EMPTY);
-    }
-
     void delete(@NotNull final HttpSession session,
                 @NotNull final MetaRequest meta) {
         if (meta.proxied()) {
-            try {
-                dao.remove(ByteBuffer.wrap(meta.getId().getBytes(Charsets.UTF_8)));
-                sendResponse(session, new Response(Response.ACCEPTED, Response.EMPTY));
-                return;
-            } catch (NoSuchElementException e) {
-                sendResponse(session, new Response(Response.NOT_FOUND, Response.EMPTY));
-                return;
-            } catch (IOException e) {
-                sendResponse(session, new Response(Response.INTERNAL_ERROR, Response.EMPTY));
-                return;
-            }
+            executeIfProxied(session, meta, Method.DELETE);
+            return;
         }
 
         final var replicas = topology.replicas(
@@ -192,14 +148,14 @@ final class HttpService {
             sendResponse(session, new Response(Response.ACCEPTED, Response.EMPTY));
             return;
         }
-        getResponsesFromReplicas(replicas, meta)
+        getResponsesFromReplicas(httpClient, topology, replicas, meta)
                 .whenCompleteAsync((responses, failure) -> {
                     for (final var response : responses) {
                         if (response.statusCode() == 202) {
                             acks.incrementAndGet();
                             if (acks.get() >= meta.getRf().getAck()) {
                                 sendResponse(session, new Response(Response.ACCEPTED, Response.EMPTY));
-                                return ;
+                                return;
                             }
                         }
                     }
@@ -211,88 +167,34 @@ final class HttpService {
                 });
     }
 
-    private CompletableFuture<List<HttpResponse<byte[]>>> getResponsesFromReplicas(
-            @NotNull final List<String> replicas,
-            @NotNull final MetaRequest meta) {
-        final int acks = replicas.remove(topology.whoAmI())
-                ? meta.getRf().getAck() - 1
-                : meta.getRf().getAck();
-        if (acks > 0) {
-            final var futures = new ArrayList<CompletableFuture<HttpResponse<byte[]>>>();
-            for (final var node : replicas) {
-                final var requestBuilder = HttpRequest.newBuilder(URI.create(node + meta.getRequest().getURI()))
-                        .setHeader(PROXY_HEADER_NAME, PROXY_HEADER_VALUE);
-                final var body = meta.getRequest().getBody();
-                switch (meta.getMethod()) {
-                    case GET:
-                        requestBuilder.GET();
-                        break;
-                    case PUT:
-                        requestBuilder.PUT(HttpRequest.BodyPublishers.ofByteArray(body));
-                        break;
-                    case DELETE:
-                        requestBuilder.DELETE();
-                        break;
-                    case POST:
-                        requestBuilder.POST(HttpRequest.BodyPublishers.ofByteArray(body));
-                        break;
-                    default:
-                        throw new IllegalArgumentException("Service doesn't support method "
-                                + meta.getMethod());
-                }
-                futures.add(httpClient.sendAsync(
-                        requestBuilder.build(),
-                        HttpResponse.BodyHandlers.ofByteArray()));
-            }
-            return getFirstResponses(futures, acks);
-        }
-        return CompletableFuture.completedFuture(Collections.emptyList());
-    }
-
-    @SuppressWarnings("FutureReturnValueIgnored")
-    private static <T> CompletableFuture<List<T>> getFirstResponses(@NotNull final List<CompletableFuture<T>> futures,
-                                                                    final int acks) {
-        if (futures.size() < acks) {
-            throw new IllegalArgumentException("Number of expected responses = "
-                    + futures.size() + " but acks = " + acks);
-        }
-        final int maxFails = futures.size() - acks;
-        final var fails = new AtomicInteger(0);
-        final var responses = new CopyOnWriteArrayList<T>();
-        final var result = new CompletableFuture<List<T>>();
-
-        final BiConsumer<T,Throwable> biConsumer = (value, failure) -> {
-            log.info("{}", value);
-            if ((failure != null || value == null) && fails.incrementAndGet() > maxFails) {
-                result.complete(responses);
-            } else if (!result.isDone() && value != null) {
-                responses.add(value);
-                if (responses.size() == acks) {
-                    result.complete(responses);
-                }
-            }
-        };
-        for (final var future : futures) {
-            future.orTimeout(1, TimeUnit.SECONDS)
-                    .whenCompleteAsync(biConsumer)
-                    .exceptionally(ex -> {
-                        log.error("Failed to get response", ex);
-                        return null;
-                    });
-        }
-        return result;
-    }
-
-    static void sendResponse(@NotNull final HttpSession session,
-                                     @NotNull final Response response) {
+    private void executeIfProxied(@NotNull final HttpSession session,
+                                  @NotNull final MetaRequest meta,
+                                  @NotNull final Method method) {
         try {
-            session.sendResponse(response);
-        } catch (IOException e) {
-            try {
-                session.sendError(Response.INTERNAL_ERROR, "Internal error");
-            } catch (IOException ex) {
-                log.error("Error with send response {}", ex.getMessage());
+            switch (method) {
+                case GET:
+                    final var response = ServiceValue.transform(
+                            ServiceValue.from(dao.getValue(ByteBuffer.wrap(meta.getId().getBytes(Charsets.UTF_8)))),
+                            true);
+                    sendResponse(session, response);
+                    break;
+                case UPSERT:
+                    dao.upsert(ByteBuffer.wrap(meta.getId().getBytes(Charsets.UTF_8)), meta.getValue());
+                    sendResponse(session, createEmptyResponse(Response.CREATED));
+                    break;
+                case DELETE:
+                    dao.remove(ByteBuffer.wrap(meta.getId().getBytes(Charsets.UTF_8)));
+                    sendResponse(session, new Response(Response.ACCEPTED, Response.EMPTY));
+                    break;
             }
+        } catch (NoSuchElementException e) {
+            sendResponse(session, createEmptyResponse(Response.NOT_FOUND));
+        } catch (IOException e) {
+            sendResponse(session, createEmptyResponse(Response.INTERNAL_ERROR));
         }
+    }
+
+    private enum Method {
+        GET, UPSERT, DELETE
     }
 }

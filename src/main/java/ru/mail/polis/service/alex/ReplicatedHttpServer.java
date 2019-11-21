@@ -21,8 +21,8 @@ import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.util.concurrent.Executor;
 
-import static ru.mail.polis.service.alex.HttpService.PROXY_HEADER;
-import static ru.mail.polis.service.alex.HttpService.sendResponse;
+import static ru.mail.polis.service.alex.HttpServiceUtils.PROXY_HEADER;
+import static ru.mail.polis.service.alex.HttpServiceUtils.sendResponse;
 
 public class ReplicatedHttpServer extends HttpServer implements Service {
 
