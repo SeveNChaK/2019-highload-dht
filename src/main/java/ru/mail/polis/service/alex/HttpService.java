@@ -184,7 +184,7 @@ final class HttpService {
                 ? replicas.size() - 1
                 : replicas.size();
         final var responses = new ArrayList<Response>();
-        for (int i = 0; i < numResponses; i++){
+        for (int i = 0; i < numResponses; i++) {
             try {
                 responses.add(proxyService.take().get());
             } catch (ExecutionException | InterruptedException e) {

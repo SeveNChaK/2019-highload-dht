@@ -44,17 +44,17 @@ public class MemTablePool implements Table, Closeable {
      **/
     public MemTablePool(final long flushThresholdInBytes,
                         final long startIndex,
-                        final int nThreadsToFlush,
+                        final int numberThreadsToFlush,
                         @NotNull final Runnable flushingTask) {
         this.flushThresholdInBytes = flushThresholdInBytes;
         this.current = new MemTable();
         this.pendingToFlush = new TreeMap<>();
         this.index = startIndex;
-        this.flushQueue = new ArrayBlockingQueue<>(nThreadsToFlush + 1);
+        this.flushQueue = new ArrayBlockingQueue<>(numberThreadsToFlush + 1);
         this.isClosed = new AtomicBoolean();
         this.pendingToCompact = new TreeMap<>();
 
-        this.flusher = Executors.newFixedThreadPool(nThreadsToFlush);
+        this.flusher = Executors.newFixedThreadPool(numberThreadsToFlush);
         this.flushingTask = flushingTask;
     }
 
