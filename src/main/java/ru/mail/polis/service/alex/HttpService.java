@@ -94,15 +94,20 @@ final class HttpService {
 
     @NotNull
     Response upsert(@NotNull final MetaRequest meta) {
+        Response result = null;
         if (meta.proxied()) {
             try {
                 dao.upsert(ByteBuffer.wrap(meta.getId().getBytes(Charsets.UTF_8)), meta.getValue());
-                return new Response(Response.CREATED, Response.EMPTY);
+                result = createResponse(Response.CREATED);
             } catch (NoSuchElementException e) {
-                return new Response(Response.NOT_FOUND, Response.EMPTY);
+                result = createResponse(Response.NOT_FOUND);
             } catch (IOException e) {
-                return new Response(Response.INTERNAL_ERROR, Response.EMPTY);
+                result = createResponse(Response.INTERNAL_ERROR);
             }
+        }
+
+        if (result != null){
+            return result;
         }
 
         final var replicas = topology.replicas(
@@ -119,17 +124,27 @@ final class HttpService {
             }
         }
         if (acks >= meta.getRf().getAck()) {
-            return new Response(Response.CREATED, Response.EMPTY);
-        }
-        for (final var response : getResponsesFromRelicas(replicas, meta)) {
-            if (response.getStatus() == 201) {
-                acks++;
-                if (acks == meta.getRf().getAck()) {
-                    return new Response(Response.CREATED, Response.EMPTY);
+            result = createResponse(Response.CREATED);
+        } else {
+            for (final var response : getResponsesFromRelicas(replicas, meta)) {
+                if (response.getStatus() == 201) {
+                    acks++;
+                    if (acks == meta.getRf().getAck()) {
+                        result = createResponse(Response.CREATED);
+                        break;
+                    }
                 }
             }
         }
-        return new Response(Response.GATEWAY_TIMEOUT, Response.EMPTY);
+        if (result == null){
+            result = createResponse(Response.GATEWAY_TIMEOUT);
+        }
+        return result;
+    }
+
+    @NotNull
+    private Response createResponse(final String resultCode){
+        return new Response(resultCode, Response.EMPTY);
     }
 
     @NotNull
