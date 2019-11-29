@@ -11,8 +11,6 @@ import one.nio.http.Request;
 import one.nio.net.Socket;
 import one.nio.server.AcceptorConfig;
 import org.jetbrains.annotations.NotNull;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import ru.mail.polis.dao.DAO;
 import ru.mail.polis.dao.alex.LSMDao;
 import ru.mail.polis.service.Service;
